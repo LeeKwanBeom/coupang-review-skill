@@ -9,7 +9,7 @@
 해야 한다.** 한쪽만 고치면 다음 회차가 틀린 지시를 먼저 읽는다.
 채택 여부를 묻기 전에 고치지 마라.
 
-버전: v1 (2026-09-09 — baemin-review 점검표를 이 스킬 구조에 맞춰 옮김)
+버전: v2 (2026-09-09 — 1회차 점검 개정안 10건 반영. v1: baemin-review 점검표를 이 스킬 구조에 맞춰 옮김)
 
 ---
 
@@ -28,7 +28,8 @@
 > 지금 주시면 진단 후 바로 올리고, 없으면 파일로만 드리겠습니다.
 
 토큰 없이 진행하기로 했으면 진단 도중에도 중간 산출물을 파일로 먼저 내려주고
-마지막에 다시 알려라. 토큰은 대화에 남으니 작업이 끝나면 폐기하라고 안내할 것.
+마지막에 다시 알려라. **토큰은 대화에 남으니 채팅 보고의 마지막 줄에 "GitHub 에서
+폐기해 달라"고 반드시 적어라** — 지시문에 토큰이 그대로 들어온 회차(1회차)가 있었다.
 
 [시작 전 확인 ② — 정본이 두 곳에 있다. 어느 쪽이 최신인지부터 확인해라]
 
@@ -36,7 +37,7 @@
 
 | 무엇 | 어디 | 역할 |
 |---|---|---|
-| 실행 본문 | 설치본 `/mnt/skills/plugins/coupang-review/SKILL.md` | 스킬이 실제로 읽고 도는 것 |
+| 실행 본문 | 설치본 — 스킬 호출 시 표시되는 **Base directory** 아래 `SKILL.md` | 스킬이 실제로 읽고 도는 것 |
 | 사본·정본 | 저장소 `SKILL.md` | 수정은 여기서 하고 `.skill` 로 패키징 |
 | 점검표·기준선 | 저장소 `audit/` | 이 파일과 회차 기록 |
 
@@ -44,11 +45,14 @@
   고친 내용을 남기려면 저장소에 push 하고, `.skill` 로 다시 패키징해
   **사용자가 Claude 설정에서 재업로드**해야 실행에 반영된다.
 
-**시작하면서 둘을 대조해라.**
+**시작하면서 둘을 대조해라.** 설치본 경로는 환경마다 다르다 — `/mnt/skills/plugins/…` 는
+Cowork 클라우드 세션에 없고(1회차 실측), 그 세션에서는
+`/root/.claude/skills/synced/<id>/coupang-review/SKILL.md` 였다. 경로를 짐작하지 말고
+**스킬 호출 시 화면에 찍히는 "Base directory" 줄의 경로**를 쓴다.
 
 ```bash
 git clone https://github.com/LeeKwanBeom/coupang-review-skill
-md5sum coupang-review-skill/SKILL.md /mnt/skills/plugins/coupang-review/SKILL.md
+md5sum coupang-review-skill/SKILL.md "<Base directory>/SKILL.md"
 ```
 
 - **md5 동일** → 정상. 그대로 진행한다.
@@ -66,12 +70,20 @@ md5sum coupang-review-skill/SKILL.md /mnt/skills/plugins/coupang-review/SKILL.md
 그러므로 이 점검은 **실제 1회 실행을 포함한다.** 다만 조건이 있다.
 
 - **엑셀을 먼저 백업해라.** 이 스킬은 스냅샷 동기화라 실행이 기존 행을 지운다.
-  `$HOME/skillwork` 를 `mkdir -p` 로 만든 뒤 `$HOME/mnt/claude/쿠팡_저점수리뷰.xlsx`
-  를 날짜·시각이 붙은 이름으로 복사해 둔다.
-- **Step 3(엑셀 저장)은 실행하지 마라.** Step 0~2 와 결과 읽기까지만 하고,
-  저장 직전에서 멈춘다. 점검은 진단이지 갱신이 아니다.
+  백업은 **사용자 폴더 안** `$HOME/mnt/claude/backup/` 에 날짜·시각이 붙은 이름으로
+  둔다(`mkdir -p` 로 만든다). `$HOME/skillwork` 같은 `$HOME` 아래는 세션별 홈
+  (`/sessions/rcw-<세션id>/`)이라 세션이 끝나면 접근할 수 없다 — 1회차에서 그렇게
+  둔 백업이 세션과 함께 사라졌다. SKILL.md Step 0 에도 같은 백업 단계가 있다(v2).
+- **Step 3(엑셀 저장)은 실제 파일 대상으로는 실행하지 마라. 사본 dry-run 은 한다.**
+  Step 0~2 와 결과 읽기까지 한 뒤, 3-1 JSON 을 기록하고 3-2 저장 스크립트를
+  **엑셀 사본**(`cp` 해 둔 파일)에 돌려 `new/deleted/rows` 를 본다. 실제 파일의
+  mtime·md5 가 그대로인지 끝에 확인해라. 1회차에서 이 방식으로 결함 1 을 재현했다.
 - 브라우저·로그인이 준비돼 있지 않으면 사용자에게 요청하고 기다려라.
   배민과 달리 계정 전환은 없다. 쿠팡이츠 스토어 한 계정으로 3매장이 다 보인다.
+- **audit-only 계측은 1줄까지 허용한다.** 원본 수집 배열이나 타이밍을 남기려고
+  Step 2 스크립트에 `window._all[store.name] = all` 같은 대입 한 줄을 넣는 것은
+  된다. 단 **판정 로직(`ok`·`reason`·`pick()` 후보·페이지 루프)은 건드리지 않는다.**
+  넣은 줄은 기준선 "실행 실측 기록"에 그대로 적어라.
 
 실행이 불가능하면 그 사실을 명시하고 **실행으로만 확인되는 항목을 전부
 [추론]으로 표시해라.** 문서만 읽고 "필드명이 맞다 / API 가 정상이다" 라고 쓰지 마라.
@@ -124,7 +136,7 @@ md5sum coupang-review-skill/SKILL.md /mnt/skills/plugins/coupang-review/SKILL.md
 | `ok` 플래그 기본값이 실패 | 저장 스크립트의 `ok_stores` 필터를 빼면 실패 매장이 빈 배열로 동기화돼 저점수가 통째로 사라짐 | Step 2 `fail()` · Step 3-2 |
 | `size=5` 고정 | 다른 값은 WAF 403 | Step 2 `page()` |
 | 401 은 즉시 치명 실패, 403 은 일반 오류 | 401 을 재시도하면 무의미하게 반복하고, 403 에서 중단하면 정상 수집이 막힘 | Step 2 `page()` |
-| 결과를 매장 단위로 나눠 읽기 | 한 번에 읽으면 약 1,000자에서 조용히 잘려 데이터를 잃음 | 결과 읽기 |
+| 결과를 매장 단위로 나눠 읽기 | 한 번에 읽으면 약 1,000자에서 `[TRUNCATED]` 표식과 함께 잘려 데이터를 잃음. 매장 하나도 저점수 5건 안팎이면 한계 근처 | 결과 읽기 |
 | 별점을 못 읽은 리뷰를 버리지 않음 | `ratingFail` 로 세고 `[별점확인필요]` 로 남긴다. 4~5점으로 **확인된** 것만 제외 | Step 2 `one()` |
 | 실패 매장도 배열에 남김 | 사람이 골라내면 저장 스크립트가 판단할 근거가 사라짐 | Step 3-1 |
 | `ws.delete_rows` | 셀을 None 으로 비우면 빈 행이 누적돼 파일이 계속 커짐 | Step 3-2 |
@@ -136,10 +148,13 @@ md5sum coupang-review-skill/SKILL.md /mnt/skills/plugins/coupang-review/SKILL.md
 ■ A. 문서와 코드가 어긋나는 곳
    - 매장 정보 표(storeId 3개)가 실제 URL·응답과 맞는지
    - 트러블슈팅 표의 증상·원인·대응이 실제 코드 동작과 맞는지
-   - 실측 수치(1,214자 잘림, 저점수 7건 등)가 지금도 유효한지. 낡았으면 갱신 대상
+   - 실측 수치가 지금도 유효한지. 현재 기준: 전체 `_res` JSON 1,243자 / 저점수 5건
+     (2026-09-09), 매장별 325·305·609자, 저점수 1건당 97~162자. 낡았으면 갱신 대상
    - Step 간 값 인계(`apiTotal`·`ok`·`authExpired`·`failedPages`)가 끊기는 지점
-   - `window.__API__` 를 Step 1 에서 정의하고 Step 2 가 쓰는 구조가 실제로 이어지는지
-     (Step 1 을 건너뛰거나 페이지가 이동하면 그 값이 사라진다)
+   - **API 필터 기준과 엑셀 `날짜` 열이 같은 필드인지.** 1회차 실측: API 는
+     `createdAt`(리뷰 작성일)로 거르고 엑셀 열은 `orderedAt`(주문일)이다. 이 차이
+     때문에 생긴 결함 1 을 수정 회차에서 고쳤다. `createdAt` 최소값이 `startDate` 와
+     같은지로 필터 기준이 그대로인지 본다
 
 ■ B. API 응답 스키마가 현재와 맞는지  ※ 실행으로만 판정 가능
    - `pick()` 후보들이 실제 응답에 존재하는지:
@@ -148,11 +163,19 @@ md5sum coupang-review-skill/SKILL.md /mnt/skills/plugins/coupang-review/SKILL.md
      `orderedAt`/`orderDate`/`createdAt`/`reviewedAt` ·
      `abbrOrderId`/`orderId`/`shortOrderId`/`orderNo` ·
      `orderInfo`/`items`/`menuInfo`/`orderItems`
-   - **실제 응답의 최상위 키 목록을 그대로 보고해라.** 후보에 없는 새 필드가
-     있으면 그것도 적어라. 다음 회차가 이걸 기준으로 대조한다.
-   - `statusType=EXPOSE` 가 여전히 유효한지 (3매장 모두 `apiTotal=0` 이면 특히 의심)
-   - `size=5` 외의 값이 정말 403 인지 — **한 번만 실측해라.** WAF 를 반복해서
-     건드리지 마라.
+   - **실제 응답의 최상위 키 목록을 그대로 보고하고, 직전 기준선의 목록과 대조해라.**
+     기준선(2026-09-09): 최상위 `data, error, code` / `data` 아래 `content, pageNumber,
+     pageSize, total` / 리뷰 18키. 후보에 없는 새 필드가 있으면 그것도 적어라.
+   - **API 가 HTTP 200 + `code`≠`SUCCESS` + `error.message` 로 오류를 돌려주는 경우**
+     스킬이 `API 오류 <code>: <message>` 로 보고하는지. 존재하지 않는 storeId(예: 1)로
+     한 번 돌려 확인한다(실측 기준: `10001 상점 정보를 찾을 수 없습니다.`). 이건 WAF 와
+     무관해서 매 회차 해도 된다.
+   - `statusType=EXPOSE` 가 여전히 유효한지. 값이 틀리면 `apiTotal=0` 이 아니라
+     `API 오류 10007` 로 나타난다(1회차 실측). 3매장 모두 `apiTotal=0` 이면 날짜
+     파라미터 쪽을 의심한다.
+   - `size=5` 외의 값이 403 인지는 **변경 의심 시에만** 실측한다(기준선에 2026-09-09
+     `size=10 → 403` 이 기록돼 있다). 평소엔 WAF 를 건드리지 마라 — 아래 판정 기준의
+     "WAF 는 건드리지 마라" 와 같은 뜻이다.
 
 ■ C. 조용한 실패가 가능한 경로
    이 스킬의 최대 위험은 "조용히 0건"이다. 아래를 코드에서 짚어라.
@@ -174,7 +197,8 @@ md5sum coupang-review-skill/SKILL.md /mnt/skills/plugins/coupang-review/SKILL.md
 ■ E. 자동화·구조 개선 후보  ※ 결과는 전부 개선안으로 분류
    - 배민 스킬과 공유 가능한 부분(엑셀 저장 로직·날짜 정규화·`ok` 판정)
    - 매장 정보를 문서 본문이 아니라 별도 설정으로 뺄지
-   - 배민에 있는 `blocked` 집계처럼 `collected + α === apiTotal` 을 검증할 수 있는지
+   - `collected === apiTotal` 정확 일치를 보고에 올릴지(1회차엔 3매장 모두 정확 일치.
+     쿠팡 API 엔 배민의 `blocked` 같은 제외 집계가 없어 α 는 0 이어야 한다)
 
 [판정 기준]
 

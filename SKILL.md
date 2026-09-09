@@ -20,7 +20,7 @@ URL: `https://store.coupangeats.com/merchant/management/reviews/<storeId>`
 - **`size=5` 고정**: 다른 값을 넣으면 WAF가 403을 돌려준다. 페이지 수가 늘더라도 이 값을 바꾸지 말 것.
 - **매장·페이지 모두 순차 호출**: 병렬로 부르면 API가 잘못된 `total`을 반환하는 사례가 있었다.
 - **`javascript_tool` 호출은 45초에서 CDP 타임아웃**이 난다. 수집은 백그라운드로 돌리고 폴링으로 확인한다.
-- **`javascript_tool` 반환값은 약 1,000자에서 잘린다**(2026-09-05 실측). 오류 없이 조용히 끊기므로 결과는 처음부터 매장 단위로 나눠 읽는다(아래 "결과 읽기").
+- **`javascript_tool` 반환값은 약 1,000자에서 잘린다**(2026-09-05 실측, 2026-09-09 재확인). 예외는 없고 끝에 `[TRUNCATED]` 표식과 함께 끊기므로 결과는 처음부터 매장 단위로 나눠 읽는다(아래 "결과 읽기").
 - **엑셀은 사용자 PC에서 직접 처리**한다(`device_bash`). 클라우드 컨테이너엔 `/sessions` 경로 자체가 없으므로 `find /sessions/*/mnt/...` 같은 탐색을 되살리지 말 것. 스테이징·전송·커밋 왕복도 필요 없다.
 
 ### 조용한 0건을 막는 세 가지 원칙 (2026-09-06 도입 — 되돌리지 말 것)
@@ -43,6 +43,14 @@ ls -d $HOME/mnt/claude && python3 -c "import openpyxl;print('openpyxl ok')" && l
 - `device_bash` 자체가 실패하면 → PC에 연결되어 있지 않다고 알리고, 수집은 진행하되 결과를 채팅 표로만 출력한다.
 
 엑셀 경로는 `$HOME/mnt/claude/쿠팡_저점수리뷰.xlsx` 이다.
+
+`UNLOCKED`면 **실행 전 백업**을 사용자 폴더 안에 남긴다. 이 스킬은 스냅샷 동기화라 Step 3가 기존 행을 지우므로 백업이 유일한 되돌리기 수단이다. `$HOME/skillwork`나 `$HOME` 아래는 세션별 홈이라 세션이 끝나면 접근할 수 없으니(2026-09-09 실측) 거기에 두지 말 것.
+
+```bash
+mkdir -p $HOME/mnt/claude/backup && if [ -f "$HOME/mnt/claude/쿠팡_저점수리뷰.xlsx" ]; then cp "$HOME/mnt/claude/쿠팡_저점수리뷰.xlsx" "$HOME/mnt/claude/backup/쿠팡_저점수리뷰_$(date +%Y%m%d_%H%M%S).xlsx" && echo "백업 완료: $(ls -t $HOME/mnt/claude/backup/ | head -1)" || echo "백업 실패 — 중단하고 사용자에게 알린다"; else echo "백업 대상 없음(첫 실행)"; fi
+```
+
+백업은 `backup/` 폴더에 회차마다 쌓인다. 정리는 사용자 몫이며 스킬이 지우지 않는다.
 
 ---
 
@@ -118,6 +126,10 @@ window._res = null; window._err = null; window._log = [];
         if (r.status === 401) return { ok: false, error: 'HTTP 401', fatal: true };
         if (!r.ok) throw new Error('HTTP ' + r.status);
         const j = await r.json();
+        // 이 API는 오류를 HTTP 200 + code≠SUCCESS + error.message 로 돌려준다(2026-09-09 실측: 없는 storeId → 10001,
+        // statusType 누락 → 10007). 재시도해도 같은 답이므로 즉시 실패로 올린다. code 필드가 없는 응답은 종전대로 다룬다.
+        if (j && typeof j === 'object' && 'code' in j && j.code !== 'SUCCESS')
+          return { ok: false, apiError: true, error: `API 오류 ${j.code}: ${j?.error?.message || '(메시지 없음)'}` };
         return { ok: true, data: j?.data ?? j?.result ?? j };
       } catch (e) {
         clearTimeout(t);
@@ -141,7 +153,8 @@ window._res = null; window._err = null; window._log = [];
     };
 
     const first = await page(store.id, 1);
-    if (!first.ok) return fail(first.fatal ? '인증만료(401) — 수집 도중 세션 종료' : 'p1 실패 ' + first.error,
+    if (!first.ok) return fail(first.fatal ? '인증만료(401) — 수집 도중 세션 종료'
+      : first.apiError ? first.error : 'p1 실패 ' + first.error,   // API 오류는 서버가 준 메시지를 그대로 사유로 쓴다
       { authExpired: !!first.fatal });
     const d = first.data;
     const content = contentOf(d);
@@ -258,7 +271,7 @@ JSON.stringify(window._res.map(s => [s.storeName, s.ok, s.reason, s.apiTotal, s.
 JSON.stringify(window._res[0])   // 이어서 [1], [2]
 ```
 
-> **왜 나눴 읽는가**: `javascript_tool` 반환값은 약 1,000자에서 잘린다. 2026-09-05 실측에서 저점수가 3개 매장 합계 7건뿐인 결과도 전체 JSON이 1,214자였고 세 번째 매장 중간에서 끊겼다 — 매장별 메타데이터가 붙어 금방 한계를 넘는다. 잘림은 오류 없이 조용히 일어나므로 "짧겠지" 하고 한 번에 읽으면 데이터를 잃는다. 매장 하나씩은 저점수가 몇 건이든 1,000자 안에 들어온다.
+> **왜 나눴 읽는가**: `javascript_tool` 반환값은 약 1,000자에서 잘린다. 2026-09-09 실측에서 저점수가 3개 매장 합계 5건뿐인 결과도 전체 JSON이 1,243자였다(2026-09-05에는 7건에 1,214자) — 매장별 메타데이터가 약 200자씩 붙어 금방 한계를 넘는다. 잘림은 예외 없이 끝에 `[TRUNCATED]` 표식과 함께 일어나므로, 표식이 보이면 그 결과는 버리고 더 잘게 읽는다. 매장 하나는 메타데이터 약 200자 + 저점수 1건당 약 100~160자라, 저점수 5건 안팎이면 1,000자 근처이고 그 이상이면 아래처럼 3건씩 읽는다.
 
 매장 하나의 저점수가 유난히 많아 그 매장마저 잘리면(끝이 끊긴 JSON), 그때만 배열을 더 쪼개 읽는다:
 ```javascript
@@ -293,15 +306,15 @@ ENDJSON
 
 기록 직후 `python3 -c "import json;json.load(open(...))"`로 파싱되는지 한 번 확인한다 — 읽기 단계에서 잘린 조각을 붙였다면 여기서 잡힌다. 다만 **파싱 검증은 잘림만 잡는다.** 빈 `lowScore`가 진짜인지 실패인지는 `ok` 플래그만이 구분한다.
 
-`$HOME/skillwork`는 사용자에게 보이지 않는 작업 공간이다. 사용자 폴더에 임시 파일을 만들지 않는다.
+`$HOME/skillwork`는 사용자에게 보이지 않는 세션별 작업 공간이다(세션이 끝나면 사라진다 — 그래서 백업은 여기 두지 않는다). 사용자 폴더에 임시 파일을 만들지 않는다.
 
 ### 3-2. 저장 스크립트
 
 시트: **"전체" 단일 시트**. 열: `매장명 | 날짜 | 별점 | 주문번호 | 주문메뉴 | 리뷰내용`. 날짜는 `YYYY-MM-DD`(배민 스킬과 동일 형식).
 
-동기화 정책 — **`ok === true`인 매장에만 적용한다.** 그 매장의 행 중 아래 둘 중 하나면 삭제한다.
-1. 날짜가 오늘 기준 1개월보다 이전 (수집 범위 밖)
-2. 1개월 이내인데 이번 수집 결과에 주문번호가 없음 (삭제되었거나 4~5점으로 수정됨)
+동기화 정책 — **`ok === true`인 매장에만 적용한다.** 그 매장의 행 중 **이번 수집 결과에 주문번호가 없는 행**을 삭제한다. 범위 밖으로 밀려난 리뷰, 삭제된 리뷰, 4~5점으로 수정된 리뷰가 전부 여기에 들어간다.
+
+**엑셀의 `날짜` 열로는 삭제를 판정하지 않는다.** API의 `startDateTime`은 **리뷰 작성일(`createdAt`)** 기준으로 거르는데 `날짜` 열은 **주문일(`orderedAt`)** 이라 두 필드가 다르다(2026-09-09 실측: 수집 580건 중 58건이 주문일은 범위 밖, 리뷰는 범위 안). 예전처럼 `날짜 < 오늘−1개월` 행을 지우면 그런 리뷰가 매 회차 삭제→재추가되어 변화가 없어도 "신규 1건, 삭제 1건"으로 오보고된다. 주문번호 대조만으로 범위 밖 행은 이미 지워지므로 날짜 규칙은 불필요하다.
 
 `ok !== true`인 매장의 행은 **읽지도 쓰지도 않는다.** 삭제도, 신규 추가도 하지 않고 그대로 둔다. 정상 수집된 매장이 하나도 없으면 파일을 열기만 하고 저장 없이 종료한다.
 
@@ -309,7 +322,7 @@ ENDJSON
 
 ```bash
 python3 - "$HOME/skillwork/coupang.json" "$HOME/mnt/claude/쿠팡_저점수리뷰.xlsx" << 'ENDPY'
-import json, sys, re, os, calendar
+import json, sys, re, os
 from datetime import date
 import openpyxl
 from openpyxl.styles import Alignment, Font, PatternFill
@@ -323,11 +336,6 @@ def star(n):
     try: n = int(n)
     except: return '?점'
     return '★'*n + '☆'*(5-n) if 1 <= n <= 5 else '?점'
-
-def months_back(d, m):
-    i = d.month - 1 - m
-    y, mo = d.year + i // 12, i % 12 + 1
-    return date(y, mo, min(d.day, calendar.monthrange(y, mo)[1]))
 
 def parse(s):
     m = re.match(r'(\d{4})-(\d{2})-(\d{2})$', str(s or '').strip())
@@ -362,7 +370,6 @@ if '삭제' in wb.sheetnames: wb.remove(wb['삭제'])   # 예전 버전이 만�
 
 rows = [list(r) for r in ws.iter_rows(min_row=2, values_only=True) if any(v not in (None,'') for v in r)]
 
-cutoff = months_back(date.today(), 1)
 current = {s['storeName']: {str(x['orderNo']).strip() for x in s.get('lowScore', [])} for s in ok_stores}
 
 kept, deleted, untouched = [], 0, 0
@@ -370,10 +377,10 @@ for r in rows:
     name, no = str(r[0] or '').strip(), str(r[3] or '').strip()
     if name in skip_names:            # 확인 필요 매장 — 손대지 않는다
         kept.append(r); untouched += 1; continue
-    d = parse(r[1])
-    too_old = d is not None and d < cutoff          # 날짜를 못 읽으면 안전하게 보존
+    # 날짜 열(주문일)로는 판정하지 않는다 — API 필터는 리뷰 작성일이라 주문일이 범위 밖이어도 수집된다.
+    # 이번 수집에 없는 주문번호만 지운다. 범위 밖·삭제·4~5점 수정이 전부 여기 걸린다.
     missing = name in current and no not in current[name]
-    if too_old or missing: deleted += 1
+    if missing: deleted += 1
     else: kept.append(r)
 
 existing = {(str(r[0]).strip(), str(r[3]).strip()) for r in kept}
@@ -418,7 +425,9 @@ for i, row in enumerate(data, start=2):
 try:
     wb.save(XLSX); saved = XLSX
 except Exception as e:
-    saved = os.path.expanduser('~/skillwork/쿠팡_저점수리뷰_backup.xlsx')
+    # 세션별 홈($HOME/skillwork)은 세션이 끝나면 접근 불가라 사용자 폴더의 backup/ 에 둔다
+    bdir = os.path.join(os.path.dirname(os.path.abspath(XLSX)), 'backup'); os.makedirs(bdir, exist_ok=True)
+    saved = os.path.join(bdir, '쿠팡_저점수리뷰_저장실패_' + date.today().strftime('%Y%m%d') + '.xlsx')
     wb.save(saved)
     print(f'[WARN] 원본 저장 실패 ({e}) → {saved}', file=sys.stderr)
 
@@ -431,7 +440,7 @@ ENDPY
 
 - `saved: false` → 저장하지 않았다. `skipped` 사유를 그대로 사용자에게 알리고 재실행을 안내한다.
 - 저장 성공 → `[OK] 엑셀 저장 (신규 N건, 삭제 N건, 총 N행)`. `skipped`가 비어 있지 않으면 **반드시 함께 보고한다.**
-- `saved_to`가 backup 경로면 → 엑셀을 닫고 다시 실행해달라고 알린다.
+- `saved_to`가 `backup/…저장실패…` 경로면 → 원본에 쓰지 못한 것이다. 엑셀을 닫고 다시 실행해달라고 알린다.
 
 ---
 
@@ -469,7 +478,7 @@ tabs_close_mcp(tabId=<탭ID>)
 
 | 증상 | 원인 | 대응 |
 |---|---|---|
-| 결과 JSON이 끝에서 끊김 (오류 없이) | `javascript_tool` 반환값 약 1,000자 제한 | 매장 단위로 나눠 읽는다. 전체를 한 번에 읽는 방식으로 되돌리지 말 것 |
+| 결과 JSON이 끝에서 `[TRUNCATED]` 표식과 함께 끊김 | `javascript_tool` 반환값 약 1,000자 제한 | 그 결과는 버리고 매장 단위(그래도 넘으면 3건씩)로 나눠 읽는다. 전체를 한 번에 읽는 방식으로 되돌리지 말 것 |
 | 한 매장만 저점수가 통째로 사라짐 | 실패를 모르고 빈 `lowScore`로 동기화함 | `ok` 플래그가 살아 있는지 확인. 저장 스크립트의 `ok_stores` 필터를 제거하지 말 것 |
 | `apiTotal: null` (확인필요) | `total`/`totalCount`/`totalElements`가 전부 없음 = 응답 스키마 변경 | 로그의 응답 키 목록으로 `pick()` 후보 추가. **`\|\| 0`으로 되돌리지 말 것** — 5건만 긁고 끝난다 |
 | `수집률 낮음 N/M` | 페이지 일부 실패 또는 중간 페이지 누락 | 재실행. 반복되면 `size`·필터 파라미터 확인 |
@@ -478,8 +487,9 @@ tabs_close_mcp(tabId=<탭ID>)
 | `STATUS:403` / 수집 중 403 | `size` 값을 바꿨을 가능성 (WAF 제약) | `size=5` 고정 확인. 403은 중단 조건이 아니다 |
 | `STATUS:401` (Step 1) | 시작 시점 인증 만료 | 로그인 요청 후 Step 1 재시작 |
 | `인증만료(401) — 수집 도중 세션 종료` | Step 2 진행 중 세션 만료 | 그 매장은 실패 처리되어 엑셀이 보존된다. 재로그인 후 재실행 |
-| `응답 구조 불명` | API 응답 스키마 변경 | 로그의 응답 키 목록으로 `pick()` 후보 추가 |
-| `apiTotal=0`인데 화면엔 리뷰가 보임 | `statusType=EXPOSE` 값 변경 가능성 | 로그의 응답 키 확인 후 파라미터 조정. 3개 매장 모두 0이면 특히 의심 |
+| `API 오류 <code>: <message>` (HTTP 200이지만 `code`≠`SUCCESS`) | 서버가 거절한 요청. 실측: 없는 storeId → `10001 상점 정보를 찾을 수 없습니다`, `statusType` 누락 → `10007 입력 된 정보가 유효하지 않습니다`(틀린 값도 같을 것으로 추정, 미실측) | `error.message`를 그대로 읽는다. 10001이면 매장 정보 표의 storeId, 10007이면 `statusType`·날짜 파라미터를 확인 |
+| `응답 구조 불명: [...]` | (1) `code` 필드가 없는 응답으로 스키마가 바뀜 (2) `code` 검사를 지나쳤는데 `content` 계열 키가 없음 | 사유에 찍힌 키 목록을 본다. `data`·`error`·`code`가 보이면 API 오류 봉투가 그대로 온 것이니 위 행으로. 그 외에는 로그의 응답 키 목록으로 `pick()` 후보 추가 |
+| `apiTotal=0`인데 화면엔 리뷰가 보임 | 날짜 파라미터가 안 먹었거나 API 필터 기준이 바뀜 | 3개 매장 모두 0이면 특히 의심. `statusType` 파라미터가 빠진 경우는 0이 아니라 `API 오류 10007`(구버전이면 `응답 구조 불명: ["statusType"]`)로 나타난다(2026-09-09 실측) — 그 행을 볼 것 |
 | 특정 매장만 `ok:false` | 그 매장 API 실패 | 나머지 매장은 계속 진행. 그 매장 엑셀 행은 보존됨. 재실행으로 복구 |
 | 페이지 수가 매우 많아 오래 걸림 | 1개월 리뷰가 많은 매장 (size=5 고정) | 정상. 폴링 로그의 `p/pages`로 진행 확인 |
 | 저장은 됐는데 파일이 계속 커짐 | 빈 행 누적 | `delete_rows`를 쓰는지 확인 |
