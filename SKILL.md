@@ -1,6 +1,6 @@
 ---
 name: "coupang-review"
-description: "쿠팡이츠 사장님 포털에서 저점수(1~3점) 리뷰를 자동 수집해 엑셀에 저장하는 스킬. 사용자가 \"쿠팡 리뷰\", \"쿠팡이츠 리뷰\", \"저점수 리뷰 확인\", \"coupang review\", \"쿠팡 리뷰 조회\", \"쿠팡 리뷰 해줘\" 등 쿠팡이츠 리뷰와 관련된 요청을 할 때 반드시 이 스킬을 사용할 것. 크롬의 인증 컨텍스트에서 내부 API를 호출해 3개 매장의 최근 1개월 리뷰를 수집하고, \"전체\" 단일 시트 엑셀에 저장한다."
+description: "쿠팡이츠 사장님 포털에서 저점수(1~3점) 리뷰를 자동 수집해 엑셀에 저장하는 스킬. 사용자가 \"쿠팡 리뷰\", \"쿠팡이츠 리뷰\", \"저점수 리뷰 확인\", \"coupang review\", \"쿠팡 리뷰 조회\", \"쿠팡 리뷰 해줘\" 등 쿠팡이츠 리뷰와 관련된 요청을 할 때 반드시 이 스킬을 사용할 것. 크롬의 인증 컨텍스트에서 내부 API를 호출해 3개 매장의 최근 3개월 리뷰를 수집하고, \"전체\" 단일 시트 엑셀에 저장한다."
 ---
 # 쿠팡이츠 저점수 리뷰 수집
 
@@ -18,7 +18,7 @@ URL: `https://store.coupangeats.com/merchant/management/reviews/<storeId>`
 
 - **API를 쓰는 이유**: `/api/v1/merchant/reviews/search`는 포털과 **same-origin**이라 페이지 컨텍스트에서 그대로 호출된다. UI 조작·스크롤이 전혀 필요 없다. (배민은 API가 다른 오리진이라 브라우저 확장 스크립트에서 전부 차단된다 — 두 스킬의 구조가 다른 이유다.)
 - **`size=5` 고정**: 다른 값을 넣으면 WAF가 403을 돌려준다. 페이지 수가 늘더라도 이 값을 바꾸지 말 것.
-- **매장·페이지 모두 순차 호출**: 2026-06-22에 매장×페이지를 **전부 동시에** 부르고(`Promise.all`) `total`을 그 병렬 응답에서 읽었을 때 API가 잘못된 `total`을 돌려준 사례가 있었다(곱도리 45, 실제 261). 2026-09-23 실측(참 제육, page 1 단독 뒤 동시 2개: 43페이지 `total` 43/43 일치·집합 동일·−54%)은 기록으로만 남기고 순차 호출을 유지한다(사용자 결정).
+- **매장은 순차, 페이지는 page 1 단독 뒤 동시 2개(`CONC = 2`, 2026-09-23 사용자 승인으로 채택)**: 2026-06-22에 매장×페이지를 **전부 동시에** 부르고(`Promise.all`) `total`을 그 병렬 응답에서 읽었을 때 API가 잘못된 `total`을 돌려준 사례가 있었다(곱도리 45, 실제 261). 지금은 `total`을 **page 1 단독 응답에서만** 읽고, 2페이지부터 동시 2개로 받는다(2026-09-23 실측 참 제육 43페이지: 모든 페이지 `total` 43/43 일치·orderReviewId 집합 동일·소요 −54%). **동시 3 이상은 실측이 없다 — 올리지 말 것.** 매장 사이는 500ms 간격 순차 그대로다.
 - **`javascript_tool` 호출은 45초에서 CDP 타임아웃**이 난다. 수집은 백그라운드로 돌리고 폴링으로 확인한다.
 - **`javascript_tool` 반환값은 1,000자에서 잘린다**(2026-09-05 실측, 2026-09-09·2026-09-23 재확인 — 정확히 1,000자). 예외는 없고 끝에 `[TRUNCATED]` 표식과 함께 끊기므로 결과는 처음부터 매장 단위로 나눠 읽는다(아래 "결과 읽기"). 또 반환값에 **쿼리 파라미터가 2개 이상(`&`)인 URL**이 들어가면 결과 전체가 `[BLOCKED: Cookie/query string data]`로 바뀐다(2026-09-23 실측: 파라미터 1개는 통과, 2개부터 차단) — 반환 JSON에 `location.href`를 넣지 않는다.
 - **엑셀 `날짜` 열은 리뷰 작성일(`createdAt`)**: API 필터 `startDateTime`과 같은 기준이다(2026-09-23 변경 — 그전엔 주문일 `orderedAt`이라 둘이 달랐다). 배민 엑셀도 리뷰 작성일이다. 삭제 판정은 날짜가 아니라 주문번호 대조로만 한다.
@@ -95,7 +95,7 @@ JSON.stringify({ st, path: location.host + location.pathname, isLogin: /login|si
 
 ## Step 2: 3개 매장 순차 수집
 
-날짜 범위는 오늘 기준 최근 1개월. 월말 overflow는 해당 월 마지막 날로 클램핑한다(8/31 − 1개월 = 7/31).
+날짜 범위는 오늘 기준 최근 3개월(2026-09-23 변경 — 그전엔 1개월). 월말 overflow는 해당 월 마지막 날로 클램핑한다(5/31 − 3개월 = 2/28, 윤년 2/29).
 
 ```javascript
 window._res = null; window._err = null; window._log = [];
@@ -115,13 +115,14 @@ window._res = null; window._err = null; window._log = [];
     const i = d.getMonth() - m, y = d.getFullYear() + Math.floor(i / 12), mo = ((i % 12) + 12) % 12;
     return new Date(y, mo, Math.min(d.getDate(), new Date(y, mo + 1, 0).getDate()));
   };
-  const startDate = fmt(monthsBack(today, 1));
+  const startDate = fmt(monthsBack(today, 3));   // 최근 3개월 (2026-09-23 변경 — 그전엔 1)
   const endDate = fmt(new Date(today.getTime() + 864e5));
   LOG(`범위 ${startDate} ~ ${endDate}`);
 
   const API = window.__API__ || '/api/v1/merchant/reviews/search';
   const TIMEOUT = 15000;    // 서버 무응답 시 무기한 대기 방지
   const MAX_PAGES = 200;    // 총건수를 못 읽었을 때만 쓰는 안전 상한
+  const CONC = 2;           // 2페이지부터의 동시 요청 수. 3 이상은 실측 없음 — 올리지 말 것 (설계 근거 참고)
 
   async function page(storeId, p) {
     const url = `${API}?storeId=${storeId}&page=${p}&statusType=EXPOSE&startDateTime=${startDate}&exclusiveEndDateTime=${endDate}&size=5`;
@@ -189,12 +190,24 @@ window._res = null; window._err = null; window._log = [];
       }
     } else {
       const pages = Math.max(1, Math.ceil(apiTotal / 5));
-      LOG(`[${store.name}] pages=${pages}`);
+      LOG(`[${store.name}] pages=${pages} (conc ${CONC})`);
+      // 2페이지부터 동시 CONC개. total은 위에서 page 1 단독 응답으로만 읽었다. 결과는 페이지 순서대로 이어 붙인다.
+      // 401(fatal)이 나오면 워커가 더 받지 않고 멈춘다 — 못 받은 페이지는 failedPages에 넣어 ok=false가 되게 한다.
+      const results = {}; let next = 2, got = 1;
+      const worker = async () => {
+        while (next <= pages && !authExpired) {
+          const p = next++;
+          const r = await page(store.id, p);
+          results[p] = r;
+          if (!r.ok && r.fatal) authExpired = true;
+          if (++got % 10 === 0) LOG(`[${store.name}] ${got}/${pages}`);
+        }
+      };
+      await Promise.all(Array.from({ length: CONC }, worker));
       for (let p = 2; p <= pages; p++) {
-        const r = await page(store.id, p);
-        if (r.ok) all.push(...(contentOf(r.data) || []));
-        else { failedPages.push(p); if (r.fatal) { authExpired = true; break; } }
-        if (p % 10 === 0) LOG(`[${store.name}] ${p}/${pages}`);
+        const r = results[p];
+        if (r && r.ok) all.push(...(contentOf(r.data) || []));
+        else failedPages.push(p);   // 실패했거나(401 뒤) 받지 못한 페이지
       }
     }
     // 수집 도중 리뷰가 추가·삭제되면 페이지가 한 칸씩 밀려 같은 리뷰가 두 페이지에 걸치거나 한 건이 빠진다(2026-09-23 실측).
@@ -280,6 +293,7 @@ window._err ? 'ERROR:' + window._err
 - `ERROR:` → 사용자에게 알리고 중단.
 - `LOG:` → 30초가 지나도 아직 진행 중. 매장·페이지 진행 상황을 보며 같은 호출을 반복한다.
 - 최대 14회(30초 × 14 = 약 7분 — 종전 40회 × 10초 간격과 같은 수준). 그 이상이면 `window._log` 전체를 보고한다.
+- 소요 기준(2026-09-23 실측, 3개월·동시 2): 3매장 1,767건·354페이지에 **80초**(순차였다면 165초) → 폴링 3회 안팎에 `DONE`. 1개월 시절(469건·96페이지·40초)의 약 2배다. 14회 상한은 6개월치라도 여유가 있다.
 - **폴링 호출 자체가 도구 오류를 반환하는 경우**(예: 브라우저 미연결)는 페이지 안의 수집과 무관하다. 페이지의 JS는 계속 돌고 있으므로 데이터 손실 없이 같은 폴링을 그대로 재시도하면 되고, 이 오류는 14회 상한에 포함하지 않는다.
 - 탭이 숨김 상태면 250ms 대기가 1초로 늘어나지만(타이머 클램프) 상한 30초는 그대로다 — 감지 간격만 성겨진다.
 
@@ -310,9 +324,9 @@ browser_batch(actions=[
 
 > **왜 나눠 읽는가**: `javascript_tool` 반환값은 정확히 1,000자에서 잘린다(2026-09-23 실측). 2026-09-23 실측에서 저점수가 3개 매장 합계 4건뿐인 결과도 전체 JSON이 1,216자였다(2026-09-09에는 5건에 1,243자, 2026-09-05에는 7건에 1,214자) — 매장별 메타데이터가 약 200자씩 붙어 금방 한계를 넘는다. 잘림은 예외 없이 끝에 `[TRUNCATED]` 표식과 함께 일어나므로, 표식이 보이면 그 결과는 버리고 더 잘게 읽는다. 매장 하나는 메타데이터 약 200자 + 저점수 1건당 약 100~240자(리뷰 길이에 따라; 2026-09-23 실측 97~239자)라, 저점수 3~5건이면 1,000자 근처이고 그 이상이면 아래처럼 3건씩 읽는다.
 
-매장 하나의 저점수가 유난히 많아 그 매장마저 잘리면(끝에 `[TRUNCATED]` 표식), 그때만 배열을 더 쪼개 읽는다:
+매장 하나의 저점수가 많아 그 매장마저 잘리면(끝에 `[TRUNCATED]` 표식), 그때만 그 매장의 `lowScore`를 3건씩 쪼개 읽는다. 잘린 매장의 `lowScore.length`는 판정 요약 줄(마지막 값)에 이미 있으므로 `ceil(length / 3)`개의 실행을 **`browser_batch` 1회**로 묶는다(3개월 기준 매장당 저점수가 5~10건이면 2~4개). 본문이 길어 3건도 잘리면 그 조각만 1건씩 다시 읽는다.
 ```javascript
-JSON.stringify({s: window._res[0].storeName, r: window._res[0].lowScore.slice(0, 3)})   // 3건씩
+JSON.stringify({s: window._res[0].storeName, i: 0, r: window._res[0].lowScore.slice(0, 3)})   // 이어서 slice(3, 6), slice(6, 9) …
 ```
 
 **판정**
@@ -323,7 +337,7 @@ JSON.stringify({s: window._res[0].storeName, r: window._res[0].lowScore.slice(0,
   > ⚠️ 수집 도중 로그인이 풀렸습니다([매장명]). 크롬에서 다시 로그인한 뒤 '완료했어요'라고 알려주시면 해당 매장만 다시 수집합니다.
 - `ratingFail > 0`인데 `ok === true` → 일부 리뷰(10% 이하)만 별점을 못 읽은 것이다. 진행하되 건수를 최종 보고에 올린다. 그 리뷰는 `[별점확인필요]`가 붙어 엑셀에 남는다. 10%를 넘으면 `ok === false`(`별점 파싱 실패 N/M — 10% 초과`)로 나온다.
 - `warn`이 비어 있지 않은데 `ok === true` → 정상 저장 대상이다. `수집 N > 전체 M — 수집 중 신규 등록 추정`(수집 도중 새 리뷰가 달려 페이지가 밀린 것, 그 리뷰는 다음 실행에서 들어온다)과 `중복 제거 N건`이 여기 온다. 최종 보고의 상태 열에 그대로 적는다.
-- **3개 매장 모두 `apiTotal === 0`** → 리뷰가 정말 없을 수도 있지만 파라미터가 안 먹었을 가능성이 더 크다. 이상 신호로 보고 사용자에게 "쿠팡이츠 화면에 최근 1개월 리뷰가 보이는지" 확인을 요청한 뒤 저장한다.
+- **3개 매장 모두 `apiTotal === 0`** → 리뷰가 정말 없을 수도 있지만 파라미터가 안 먹었을 가능성이 더 크다. 이상 신호로 보고 사용자에게 "쿠팡이츠 화면에 최근 3개월 리뷰가 보이는지" 확인을 요청한 뒤 저장한다.
 - 한 매장만 `apiTotal === 0`이고 `ok === true` → 정상으로 본다(그 매장은 실제로 리뷰가 없는 것).
 
 ---
@@ -356,7 +370,7 @@ ENDJSON
 
 `ok !== true`인 매장의 행은 **읽지도 쓰지도 않는다.** 삭제도, 신규 추가도 하지 않고 그대로 둔다. 정상 수집된 매장이 하나도 없으면 파일을 열기만 하고 저장 없이 종료한다.
 
-엑셀은 "최근 1개월 현황"이며, 과거 리뷰가 지워지는 것은 의도된 동작이다.
+엑셀은 "최근 3개월 현황"이며(2026-09-23 변경 — 그전엔 1개월), 과거 리뷰가 지워지는 것은 의도된 동작이다. 1개월→3개월로 넓힌 뒤 **첫 실행**에서는 31~90일 전 저점수가 한꺼번에 "신규"로 들어온다 — 예상된 1회성 동작이다.
 
 ```bash
 python3 - "$HOME/skillwork/coupang.json" "$HOME/mnt/claude/쿠팡_저점수리뷰.xlsx" << 'ENDPY'
@@ -517,7 +531,7 @@ tabs_close_mcp(tabId=<탭ID>)
 ## 최종 보고 형식
 
 ```
-조회 기간: YYYY-MM-DD ~ YYYY-MM-DD (최근 1개월)
+조회 기간: YYYY-MM-DD ~ YYYY-MM-DD (최근 3개월)
 
 | 매장 | 전체(API) | 수집 | 저점수 | 신규 | 별점분포(1~5) | 상태 |
 |---|---|---|---|---|---|---|
@@ -558,7 +572,7 @@ tabs_close_mcp(tabId=<탭ID>)
 | `응답 구조 불명: [...]` | (1) `code` 필드가 없는 응답으로 스키마가 바뀜 (2) `code` 검사를 지나쳤는데 `content` 계열 키가 없음 | 사유에 찍힌 키 목록을 본다. `data`·`error`·`code`가 보이면 API 오류 봉투가 그대로 온 것이니 위 행으로. 그 외에는 로그의 응답 키 목록으로 `pick()` 후보 추가 |
 | `apiTotal=0`인데 화면엔 리뷰가 보임 | 날짜 파라미터가 안 먹었거나 API 필터 기준이 바뀜 | 3개 매장 모두 0이면 특히 의심. `statusType` 파라미터가 빠진 경우는 0이 아니라 `API 오류 10007`(구버전이면 `응답 구조 불명: ["statusType"]`)로 나타난다(2026-09-09 실측) — 그 행을 볼 것 |
 | 특정 매장만 `ok:false` | 그 매장 API 실패 | 나머지 매장은 계속 진행. 그 매장 엑셀 행은 보존됨. 재실행으로 복구 |
-| 페이지 수가 매우 많아 오래 걸림 | 1개월 리뷰가 많은 매장 (size=5 고정) | 정상. 폴링 로그의 `p/pages`로 진행 확인 |
+| 페이지 수가 매우 많아 오래 걸림 | 3개월 리뷰가 많은 매장 (size=5 고정 — 2026-09-23 실측 3매장 1,767건·354페이지) | 정상. 폴링 로그의 `받은 페이지/pages`로 진행 확인 |
 | 저장은 됐는데 파일이 계속 커짐 | 빈 행 누적 | `delete_rows`를 쓰는지 확인 |
 | 날짜가 `날짜없음`으로 저장됨 | 날짜 필드명 변경(`createdAt` → `reviewedAt` → `orderedAt` → `orderDate` 순으로 찾는다) | `norm()`의 `pick()` 후보에 새 필드 추가 |
 | 첫 실행에서 `date_updated`가 기존 행 수만큼 나옴 | 2026-09-23 이전엔 `날짜` 열이 주문일이었고 이제 리뷰 작성일로 덮어씀 | 정상. 한 번만 일어난다 |
