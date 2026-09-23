@@ -1,3 +1,261 @@
+# 점검 기준선
+
+점검일: 2026-09-23 (2회차 — 진단만. 수정은 사용자가 항목을 고른 뒤 별도 회차)
+결함 3건 / 개선안(정확성) 5건 / 속도 개선안 3건(후보 1건 포함) / 인용불가로 제외 0건
+직전 기준선 대비: 해결 5건(결함 1·2·3 + 개선안 1·2 — 저장소·설치본에 수정 원문 실재, 실측 재현), 미해결(이월) 3건(개선안 1·2·3 → 이번 순위 갱신), 근거없음 0건, 신규 결함 3건
+점검 대상: 저장소 `SKILL.md` 495행(`wc -l`; 마지막 줄 개행 없음 → 실제 줄 수 496. **아래 행 번호는 실제 줄 번호 = Read 도구 번호**), md5 `abeb17eb030fbd03a483a398cd7d0401` — 설치본(`/root/.claude/skills/synced/<id>/coupang-review/SKILL.md`)·사용자 폴더 `coupang-review.skill`(09-09 11:16) 안 SKILL.md 와 **셋 모두 동일**(frontmatter `name: coupang-review` 따옴표 없음, 본문 md5 `34b264e3…` 동일) /
+          실제 실행: 3매장 전부 Step 0~2 + 결과 읽기(Step 3 은 실제 파일 대상 미실행, 저장 스크립트는 엑셀 **사본** dry-run 5종) /
+          엑셀 백업: `$HOME/mnt/claude/backup/쿠팡_저점수리뷰_20260923_060257.xlsx`(Step 0 백업 블록 실동작, 원본 md5 `5508d87b1ad9e6f66c22a34f24a2971f` mtime 2026-09-20 01:33:49 UTC — 점검 전후 4회 확인 불변) /
+          브라우저: Claude in Chrome(크롬 확장)만 사용. 시작 시 로그인 상태(`STATUS:200`), 수집 중 401 없음. P6 로그아웃은 사용자가 수행. 점검 모델: Claude Fable 5.1(Cowork 클라우드)
+1차 커밋(진단): `audit/last-audit.md` 만. `SKILL.md`·`checklist.md` 는 손대지 않았다. 사용자 폴더에 사본 `coupang-review_last-audit_2026-09-23.md` 도 내려놓았다.
+
+> 이번 회차의 두 목표(사용자 지시): ① 정확성 — 빠뜨리거나 잘못 읽는 리뷰 0건인지, ② 속도 — 같은 결과를 더 짧은 시간·더 적은 도구 호출로. 우선순위는 점검표 안전 규칙 > 이번 지시의 범위 > 정확성 > 속도. 속도 개선안은 "결과 집합이 현재 코드와 동일"이라는 실측이 있는 것만 올렸다(S4). 실측 없는 절감치는 [추론]으로 표시하고 "후보"로만 뒀다(S5).
+
+## 시작 전 확인 결과
+
+- 토큰: 지시문에 그대로 들어옴(대화에 남음). **작업이 끝나면 GitHub 에서 폐기할 것.** 파일·remote 어디에도 남기지 않았다.
+- 정본 대조: 저장소 = 설치본 = 사용자 폴더 `.skill` 내 SKILL.md, md5 `abeb17eb…`, 495행(wc -l). 사용자 참고값(2026-09-20 확인)과 일치. backup/ 의 `coupang-review_20260909_111655.skill` 은 정정 전 구버전(`c9753868…`)이라 대조 대상 아님.
+- 엑셀 백업: Step 0 원문(39행) → `UNLOCKED`, 백업 블록(50행) → `백업 완료: 쿠팡_저점수리뷰_20260923_060257.xlsx`(md5 원본과 동일).
+- Step 0 자동 백업의 실사용 근거: 사용자 폴더 `backup/` 에 `쿠팡_저점수리뷰_20260911_063400 · 20260912_015529 · 20260919_072730 · 20260920_013154.xlsx` 4건이 점검과 무관한 실제 실행에서 쌓여 있음 → 지난 회차 개선안 2 는 실사용에서 돌고 있다.
+- 기준선: `audit/last-audit.md` 있음(2026-09-09 회차 + 수정·기록정정·정정 회차). 배민 저장소(`baemin-review-skill` HEAD f57cc88, `audit/last-audit.md` 764행)도 clone 해 P7 대조에 썼다.
+- 사용자 폴더 CLAUDE.md 의 coupang-review v2~v8 이력은 2026-09-05 개정 이전 구조라 참고만. 단 v3(2026-06-22)의 "`Promise.all` 병렬 시 API 가 잘못된 total 반환(곱도리 total=45, 실제 261)" 은 S4 판정에 반영했다 — 그때는 **매장×페이지 전부 동시**(`Promise.all(stores.map(fetchStore))` + `Promise.all(pageNums.map(...))`)였고 total 을 그 병렬 응답에서 읽었다. 이번 S4 는 page 1 단독 → 2페이지 이후 동시 2개, total 은 page 1 에서만 읽는 설계라 조건이 다르다.
+- 현재 엑셀(점검 전): 6행 — 김치찜 114SR5(08-06)·0E0R5H(09-09)·02LD1V(09-14), 곱도리 14D7ZC(08-18), 참 제육 2VXGS1(08-27)·0FJ8NT(09-11). 매장명 분포 3/1/2 로 수집 3매장과 일치(N-3 조건 해당 0건).
+
+## 직전 기준선 판정
+
+| 항목 | 판정 | 근거(지금 원문·실측) |
+|---|---|---|
+| 결함 1 (`too_old` 날짜 규칙) | **해결됨** | 315행 `그 매장의 행 중 **이번 수집 결과에 주문번호가 없는 행**을 삭제한다.` / 317행 `**엑셀의 \`날짜\` 열로는 삭제를 판정하지 않는다.**` / 382행 `missing = name in current and no not in current[name]`. `too_old`·`cutoff`·`months_back`·`calendar` 잔존 0건. [실측] T2 dry-run `{"new":1,"deleted":3,"rows":4}` — 삭제 3건은 전부 실제 사유(114SR5·14D7ZC 는 리뷰 작성일이 범위 밖, 0E0R5H 는 게시중단(SUSPEND) 전환), 오보고 0건 |
+| 결함 2 (잘림 서술) | **해결됨** | 23행 `예외는 없고 끝에 \`[TRUNCATED]\` 표식과 함께 끊기므로` / 274·276·481행 표식 기준. `끝이 끊긴` 0건, `조용히/오류 없이` 는 28·31행 "조용히 0건" 원칙 2건뿐. [실측] `'A'.repeat(1000)+'\|END'` → 1,000자 뒤 `[TRUNCATED]`(ASCII·한글 동일, 정확히 1,000자) |
+| 결함 3 + 개선안 1 (API 오류 봉투) | **해결됨** | 131~132행 `if (j && typeof j === 'object' && 'code' in j && j.code !== 'SUCCESS') return { ok: false, apiError: true, error: \`API 오류 ${j.code}: …\` }` / 157행 `first.apiError ? first.error : 'p1 실패 ' + first.error` / 490~492행 트러블슈팅 3행. [실측] storeId=1 로 실제 `page()`/`one()` 경로 실행 → `reason: "API 오류 10001: 상점 정보를 찾을 수 없습니다."`, `_log` 동일 문장 |
+| 개선안 2 (Step 0 자동 백업) | **해결됨 + 실사용 확인** | 47~53행 백업 문단·블록. [실측] 오늘 실동작 + backup/ 에 9/11·9/12·9/19·9/20 실사용 백업 4건 |
+| 이월 개선안 1 (`apiTotal===null` 경로 reason 구분) | **미해결(이월)** | 174~181행 `for (let p = 2; p <= MAX_PAGES; p++) { … if (!c.length) break; … }` 에 상한 도달 표식 없음, 225행 `else if (apiTotal === null) { ok = false; reason = '총건수 확인 필요 — total 계열 필드를 못 읽음'; }` 가 226행 `failedPages` 검사보다 앞. 이번에도 조건은 만들지 않음(코드상 명확, `ok=false` 라 저장은 막힘) |
+| 이월 개선안 2 (저장 후 재열기) | **미해결(이월)** | 3-2 스크립트는 434~437행 `print(json.dumps({'saved': True, …}))` 로 끝나고 재열기 없음. [실측] 점검자가 dryrun_T2.xlsx 를 다시 열어 4행 = `kept 3 + new 1` 확인 — 스크립트가 하면 될 일 |
+| 이월 개선안 3 (`ratingFail` 비율·`collected≠apiTotal`) | **미해결(이월) → 순위 1 로 상향** | 227행 `else if (apiTotal > 0 && all.length < apiTotal * 0.98)` / 228행 `ratingFail === all.length`. [실측] 페이지 밀림 재현(아래 개선안 ①): 수집 중 리뷰 1건 추가·삭제로 생기는 ±1건 오차를 98% 규칙이 통과시키고 orderReviewId 중복도 검사하지 않는다 |
+| 정정 회차 N-3 (모르는 매장 행 영구 잔존) | **의도된 동작 유지** | 엑셀 6행 매장명 분포 김치찜 3 / 곱도리 1 / 참 제육 2 = 수집 3매장. 해당 0건 |
+| "다음 회차에서 대조할 것" — 495행 유지·백업 문장 4곳·잘림 5곳 | **전부 확인** | `grep 백업` 47·50·53·309행 4건(전부 자동 백업 체계와 일관), `grep 잘리면\|잘린\|TRUNCATED` 23·274·276·307·481행 5건(표식 기준 4곳 + 307행 파싱 검증) |
+| 〃 — 응답 스키마 3키/4키/18키 | **동일** | 최상위 `data, error, code` / `data` `content, pageNumber, pageSize, total` / 리뷰 18키 순서까지 동일. 신규 관측: `orderType` 값 `PICKUP`(김치찜 1·참 제육 1, 9/9 는 `REGULAR` 만) |
+| 〃 — `createdAt` 최소값 = startDate | **유지** | 3매장 모두 `2026-08-23`(= startDate). `orderedAt` 최소 08-06 / 07-30 / 08-02 |
+| 〃 — `size=10` 재실측 안 함 | **준수** | 대신 UI 가 보내는 요청을 기록: UI 도 `size=5` 를 쓴다(아래 S3) — WAF 허용값의 근거 |
+| 〃 — `[TRUNCATED]` 계속 붙는지 | **붙음** | 위 결함 2 행 |
+| 〃 — 폴링 소요 | **갱신** | 96페이지 40.3초(9/9: 119페이지 54초). 아래 속도 기준선 |
+| 〃 — isLogin 정규식·`[BLOCKED]` 주석(2회 연속 [추론]) | **둘 다 [실측] 완료** | 아래 P6 · 결함 2 |
+
+## 결함
+
+행 번호는 496줄(실제 줄 수, Read 도구 번호) 기준. 심각도 순.
+
+| # | 심각도 | 위치(절·함수) | 행 | 문제 원문(그대로) | 실측/추론 | 왜 틀렸는지 | 수정 방향 |
+|---|---|---|---|---|---|---|---|
+| 1 | 중 | Step 0 환경 확인 (한 줄 판정) + 백업 블록 | 39, 47, 50 | 39: `ls -d $HOME/mnt/claude && python3 -c "import openpyxl;print('openpyxl ok')" && ls $HOME/mnt/claude/'~$쿠팡_저점수리뷰.xlsx' 2>/dev/null && echo LOCKED \|\| echo UNLOCKED` / 47: `` `UNLOCKED`면 **실행 전 백업**을 사용자 폴더 안에 남긴다. `` / 50: `mkdir -p $HOME/mnt/claude/backup && if [ -f "$HOME/mnt/claude/쿠팡_저점수리뷰.xlsx" ]; then cp … else echo "백업 대상 없음(첫 실행)"; fi` | [실측] 조건 재현 (PC, `device_bash`) | **폴더·openpyxl 이 없어도 마지막 `\|\| echo UNLOCKED` 가 찍혀 통과한다**(배민 2026-09-09 결함 3 과 동일). 재현: (a) 없는 경로 `$HOME/mnt/NOPE_없는폴더` 로 39행 실행 → stderr `ls: cannot access …: No such file or directory` 뒤 **`UNLOCKED`, exit 0**. (b) `import openpyxl_없는모듈` 로 모사 → `ModuleNotFoundError` 뒤 **`UNLOCKED`, exit 0**. (c) 마운트 폴더가 없는 HOME 에서 39→50행 연쇄: `UNLOCKED` → 50행의 `mkdir -p` 가 **마운트되지 않은 로컬 경로에 `mnt/claude/backup` 을 새로 만들고** `백업 대상 없음(첫 실행)` 출력 → 그 경로로 3-2 저장 스크립트를 돌리면 `[OK] 새 엑셀 생성`, `{"saved": true, "new": 4, "rows": 4}` — 사용자에게는 보이지 않고 세션 종료와 함께 사라지는 파일에 "저장 완료"로 보고된다. 43행의 "`device_bash` 자체가 실패하면" 분기는 도구 실패만 잡고 마운트 부재는 못 잡는다. 실제 엑셀은 건드리지 않았다(md5 불변) | 배민(2026-09-09 결함 3 수정)처럼 세 줄로 분리: `[ -d "$HOME/mnt/claude" ] && echo FOLDER_OK \|\| echo NO_FOLDER` / `python3 -c "import openpyxl" 2>/dev/null && echo OPENPYXL_OK \|\| echo NO_OPENPYXL` / `[ -e "$HOME/mnt/claude/~\$쿠팡_저점수리뷰.xlsx" ] && echo LOCKED \|\| echo UNLOCKED`. 47행을 "`FOLDER_OK`·`OPENPYXL_OK`·`UNLOCKED` 셋 다일 때만 백업·진행, `NO_FOLDER` 면 43행 분기(채팅 표만)로, `NO_OPENPYXL` 이면 설치 안내" 로. 50행 `mkdir -p` 는 `FOLDER_OK` 뒤에만 |
+| 2 | 하 | Step 1 로그인 확인 (주석 vs 반환 필드) + 판정 규칙 | 68~69, 73, 82 | 68~69: `// 결과에 URL(쿼리스트링)을 담지 않는다 — 담으면 브라우저 도구가 [BLOCKED]로 결과 자체를 막아` `// 실제 상태 코드(401 등)를 못 본다. 상태 코드만 돌려준다.` / 73: `JSON.stringify({ st, url: location.href, isLogin: /login\|signin\|auth\|oauth\|account\|member/i.test(location.href),` / 82: `결과가 \`[BLOCKED:\`로 시작하면 무시하고 진행한다.` | [실측] 차단 조건 재현, 사이트 조건은 부분 | **주석은 "URL 을 담지 않는다"고 하는데 같은 블록이 `url: location.href` 를 담는다.** 로그아웃 상태에서 매장 URL 로 가면 `https://store.coupangeats.com/merchant/login?redirectUrl=/merchant/management/reviews/780573` 로 리다이렉트되어 `location.href` 에 쿼리스트링이 들어간다(P6 실측). 도구의 차단 규칙을 합성 문자열로 재현: 파라미터 1개(`?a=1`, `?page=1`, `?storeId=780573`, `?redirectUrl=/…`)는 통과, **파라미터 2개 이상(`&` 포함: `?a=1&b=2`, `?redirectUrl=/…&z=1`, 배민의 `?returnUrl=…&__ts=`)은 결과 전체가 `[BLOCKED: Cookie/query string data]`**. 오늘 쿠팡 리다이렉트는 파라미터 1개라 Step 1 원문이 정상 반환됐다(`st: STATUS:401, isLogin: true, hasPw: true`). 쿠팡이 파라미터를 하나 더 붙이는 날 Step 1 결과는 통째로 차단되고, 82행 규칙이 그 결과를 **"무시하고 진행"** 시켜 로그인 확인이 정확히 필요한 순간에 건너뛰어진다(Step 2 가 매장마다 401 을 잡아 `ok:false` 로 끝나므로 데이터 유실은 없지만 3매장 수집 시도 + "재로그인" 안내가 늦어진다). 사이트가 두 번째 파라미터를 붙이는 조건은 만들 수 없었다 — 그래서 심각도 하, 지금 틀린 것은 주석과 코드의 불일치 | 73행 `url: location.href` → `path: location.host + location.pathname`, `isLogin` 도 `location.pathname` 기준(오늘 값 `/merchant/login` 에 `login` 매칭). 82행을 "결과가 `[BLOCKED:` 로 시작하면 **로그인 필요로 간주**해 78행 문구로 요청" 으로(배민 2026-09-20 결함 2 와 같은 수정). 68~69행 주석은 "파라미터 2개 이상인 URL" 로 정밀화 |
+| 3 | 하 | 결과 읽기 (인용 블록) — 낡은 수치 | 274 | `매장 하나는 메타데이터 약 200자 + 저점수 1건당 약 100~160자라, 저점수 5건 안팎이면 1,000자 근처이고 그 이상이면 아래처럼 3건씩 읽는다.` | [실측] | 오늘 매장별 JSON 585 / 409 / 218자(저점수 2 / 2 / 0건), 전체 `_res` 1,216자(4건), 요약 102자. 저점수 1건당 **97~239자**(김치찜 1VNPTE 장문 리뷰 239자) — "100~160자" 상한이 낡았다. 장문 리뷰 3건이면 200+3×239 ≈ 917자로 "5건 안팎" 전에 한계에 닿는다. 표식이 붙으면 3건씩 읽는 fallback 이 있어 데이터 유실은 없다(문구 갱신 대상) | `저점수 1건당 약 100~240자(리뷰 길이에 따라)라, 저점수 3~5건이면 1,000자 근처` 로. 2026-09-23 실측 수치를 274행 앞부분(1,243자/5건)과 함께 갱신 |
+
+## 개선안 (정확성, 최대 5)
+
+| # | 내용 | 이유 | 우선순위 |
+|---|---|---|---|
+| ① (이월 3 확장) | `ok` 판정을 정확 일치로: `all.length < apiTotal` → `ok=false, reason='누락 의심 N/M'`(98% 규칙 대체), `all.length > apiTotal` 또는 **orderReviewId 중복** → `ok` 유지 + 보고에 "수집 중 신규 리뷰 유입 의심" 경고, `ratingFail > all.length * 0.1` → `ok=false`(228행 전건 조건에 추가). 배민 2회차 채택 기준("수집<전체 → ok:false, 초과 → 경고")과 동일 | [실측] 페이지 밀림 재현: 김치찜 수집 직후 리뷰 1건이 추가되자(166→167, 15:06 KST) p33 이 `A[159..163]`(수집 때 `A[160..164]`), p34 가 `A[164..165]`(수집 때 `A[165]`)로 **모든 페이지 내용이 1칸씩 밀렸다.** 수집 도중 이런 추가가 일어나면 1건 중복(collected=apiTotal+1), 삭제가 일어나면 1건 누락(collected=apiTotal−1)인데 227행 `all.length < apiTotal * 0.98` 은 166건 기준 ≥163 을 통과시키고 orderReviewId 중복은 어디서도 검사하지 않는다(204행 `for (const r of all)` 에 dedup 없음). 오늘 3매장은 `uniqIds === n`(166/211/92) 이었다. 저장 스크립트의 `existing` 집합(386행)이 엑셀 중복 행은 막지만 누락은 못 막는다 | 1 |
+| ② (이월 2) | 저장 후 엑셀을 다시 열어 행수·(매장명,주문번호) 집합이 `kept + new` 와 같은지 확인하고 `verified` 필드로 출력 | 점검표 D. [실측] dry-run 4종을 점검자가 손으로 재열어 확인했다(T2 4행·T4 6행). 비용 3~4줄 | 2 |
+| ③ (이월 1) | `apiTotal === null` 경로에서 `MAX_PAGES` 도달·페이지 실패를 `reason` 에 구분 표기(`총건수 확인 필요(200p 상한 도달)` / `총건수 확인 필요 + 페이지 실패 pN`) | 174~181행 루프에 상한 표식 없음, 225행 검사가 226행보다 앞. `ok=false` 라 저장은 막히니 결함 아님(1회차 판정 유지) | 3 |
+| ④ (P3, **사용자 결정**) | 엑셀 `날짜` 열을 `orderedAt`(주문일) → `createdAt`(리뷰 작성일)로 전환(213행 `pick(r, 'orderedAt', 'orderDate', 'createdAt', 'reviewedAt')` 순서 변경). 전환 시 저장 스크립트에서 kept 행의 날짜를 이번 수집값으로 덮어써 한 파일에 두 의미가 섞이지 않게 함. 헤더명 `날짜` 유지 | 아래 P3 수치. 배민 엑셀(리뷰 작성일)과 의미가 맞고 API 범위와 열이 일치한다. 오늘 저점수 4건은 전환 여부와 무관하게 삭제·추가 건수 동일 | 4 |
+| ⑤ [추론] | 저장 스크립트가 `kept` 행(382~384행 `missing` 아니면 `kept.append(r)`)을 그대로 두므로 **별점·리뷰내용이 수정된 리뷰가 엑셀에 옛 값으로 남는다.** `current` 에 있는 주문번호는 별점·메뉴·리뷰내용을 이번 수집값으로 갱신하고, 바뀐 건수를 `updated` 로 출력 | API 에 `modifiedAt` 필드가 있어 수정이 실제로 일어난다(값 분포는 이번에 집계하지 않아 [추론]). 4~5점으로 수정된 리뷰는 315행대로 삭제되지만 1점→3점처럼 저점수 안에서 바뀐 것은 반영되지 않는다. ④ 채택 시 같은 갱신 경로를 쓴다 | 5 |
+
+## 속도 기준선 (이번 회차 신설 — 현재 설치본 코드 그대로, 실험 전에 측정)
+
+조회 기간 `2026-08-23 ~ 2026-09-24`(startDate/endDate). 수집 스크립트는 Step 2 원문(93~242행)에 audit-only 1줄만 추가(아래 실행 실측 기록). 페이지별 시간은 스크립트가 아니라 `performance.getEntriesByType('resource')`(Resource Timing, 버퍼 3,000 으로 확장)에서 읽었다 — 판정 로직·페이지 루프 불변. 시각은 페이지 시계(`Date.now()`/`performance.now()`, UTC). `document.hidden` 은 수집 내내 `false`.
+
+| 매장 | apiTotal | collected | ratingFail | 저점수 | 페이지 수 | 페이지당 평균 ms(최소/최대) | 그중 서버 응답(TTFB) 평균 | 매장 소요(초) — 첫 요청 시작→마지막 응답 끝 / `_log` 초 단위 |
+|---|---|---|---|---|---|---|---|---|
+| 김치찜의 정석 | 166 | 166 | 0 | 2 | 34 | 396.1 (222.8 / 660.8) | 393.9 | 13.5 / 06:05:58→06:06:12 (14) |
+| 참 제육 | 211 | 211 | 0 | 2 | 43 | 403.0 (215.9 / 692.8) | 400.0 | 17.4 / 06:06:12→06:06:30 (18) |
+| 퍽퍽살이 싫어 내가 만든 곱도리 | 92 | 92 | 0 | 0 | 19 | 410.9 (261.5 / 566.1) | 408.8 | 7.8 / 06:06:30→06:06:38 (8) |
+| 합계 | 469 | 469 | 0 | 4 | 96 | 401.6 | ≈399.6 | 38.7 + 매장 간 대기 0.5×3 = **40.3** (06:05:58.72 → `_res` 세팅 ≈06:06:38.97) |
+
+전체 항목:
+- 수집 시작→완료(`_log`): `06:05:58 범위 …` → `06:06:38 전체 완료 (ok 3/3)` = 40초(ms 기준 40.25초).
+- 폴링: 3회 — ① 06:06:03.73(시작 +5.0초, 지시대로 5초 대기) ② 06:06:19.36(+20.6초) ③ 06:06:43.66(+44.9초) → `DONE`. 지시된 대기는 5·10·10초인데 실제 간격은 15.6·24.3초 — 도구 왕복·해석이 5.6·14.3초 얹힘.
+- 완료 시각 vs 폴링이 감지한 시각: ≈06:06:38.97 vs 06:06:43.66 → **감지 지연 4.7초**.
+- 결과 읽기: 4회(판정 요약 1 + 매장 3), `browser_batch` 1회 왕복으로 실행(실행 단위마다 585/409/218/102자 전부 정상 반환 — 절단 한계는 실행 단위로 적용됨). 읽기 끝 06:06:55.79.
+- 벽시계(navigate 발행 06:04:08.19 클라우드 시계 → 결과 읽기 끝 06:06:55.79 페이지 시계): **167.6초**. 이 중 점검용 준비(Step 2 원문을 bash 로 추출·검증·재확인)가 ≈50초 섞여 있어 스킬 절차만이면 **≈118초**[추론] — 분해: navigate+Step 1 ≈20 · **Step 2 코드 블록 생성·전송 42.0**(배치 발행 06:05:16.66 → 페이지에서 실행 시작 06:05:58.72; 8.1KB) · 수집 40.3 · 감지 지연 4.7 · 결과 읽기 12.1(06:06:43.66→06:06:55.79, 배치 생성 포함). 두 시계는 NTP 동기 가정, 사건 순서는 전부 일관(오차 ≤1초).
+- 도구 호출 수(스킬 규정분): **7회** — `tabs_context` 1 · `navigate` 1 · Step 1 JS 1 · Step 2 배치 1(스크립트 + 5초 대기 + 폴링 ①) · 폴링 배치 2(10초 대기 + 폴링) · 읽기 배치 1(JS 4). 브라우저 액션으로 세면 JS 11 + wait 3 = 14. 감사용 추가: JS 2(Resource Timing 버퍼 설정, `READ_END` 시각) + Bash `date` 3.
+- 2026-09-09 기준값 대비: 3매장 119페이지 약 55초 → **96페이지 40.3초**(페이지 수 −23, 리뷰 580→469건). 페이지당 450~480ms(누적 역산) → **396~411ms(직접 측정, 그중 TTFB 394~409)**. 폴링 3회(8·28·46초) → 3회(5·20.6·44.9초). 결과 읽기 4회 동일.
+- 매장별 orderReviewId 집합(166/211/92, 중복 0)은 같은 오리진 `localStorage` `_audit_A_kimchi`/`_audit_A_cham`/`_audit_A_gopdori` 에 보관해 S4 와 대조했고, 점검 종료 시 삭제했다(로그아웃 후에도 같은 오리진에서 삭제 가능 — 실측).
+
+## 속도 개선안 (최대 5 — 이번 회차 신설)
+
+합격 기준(공통, 사용자 지시): 같은 매장·같은 세션에서 A(현재 코드) / B(후보) 각 1회, **orderReviewId 집합 동일 + apiTotal 동일 + 403·오류 0건**. 실험은 전부 페이지 안 `window` 함수로만 했고 저장소·설치본 SKILL.md 는 건드리지 않았다. S1·S3 는 "개선 대상 아님"으로 판정만 적는다.
+
+| # | 후보 | (a) 현재 코드 원문 | (b) 실측 | (c) 예상 절감 | (d) 정확성 리스크 · 검증 방법 | 판정 |
+|---|---|---|---|---|---|---|
+| S1 | 페이지당 ≈400ms 정체의 정체 | 123행 `const r = await fetch(url, { credentials: 'same-origin', headers: { Accept: 'application/json' }, signal: ac.signal });` (순차 `await`) | [실측] Resource Timing 96건: duration 평균 396~411ms 중 **TTFB(requestStart→responseStart) 394~409ms = 99%+**, 다운로드 1.1~2.0ms, 연결 ≈1ms, 응답 끝→다음 요청 시작 공백 1.3~1.5ms. UI 가 보내는 같은 요청도 412ms | 0 — 서버 응답 시간이 전부라 **순차 호출로는 못 줄인다** | 해당 없음 | **개선 대상 아님** (S4 로 넘김) |
+| S2 | 완료 폴링을 "호출 안에서 완료까지 대기(상한 30초, 250ms 간격)" 로 — `computer wait` 액션 제거 | 247행 `첫 확인은 5초 후, 이후 10초 간격.` / 250~252행 `window._err ? 'ERROR:' + window._err : window._res ? 'DONE' : 'LOG:' + JSON.stringify(window._log.slice(-4))` | [실측] 현재: 감지 지연 4.7초, 폴링 3회, 폴링 간 실제 간격 15.6·24.3초(도구 왕복 포함). 후보 검증(가짜 완료 플래그, 실제 수집과 무관): 12초 뒤 플래그 세팅 → 호출은 **12,257ms 대기 후 정상 반환, 감지 지연 247ms**, CDP 타임아웃 없음 | 40초 수집 기준 폴링 2회(0→30초 `LOG`, 30→40.3초 `DONE`), 감지 지연 4.7→≈0.3초, `wait` 액션 3회 제거 → **≈4~5초 + 도구 호출 1회**. 지시된 대안(첫 15초 후 5초)은 도구 왕복 5~14초가 얹혀 실효 간격이 10~20초로 남아 절감 0~3초·호출 +1~2회라 비권장 | 폴링만 바뀌므로 결과 집합 영향 없음. 상한 30초는 45초 CDP 한계에 15초 여유, 숨김 탭에서 250ms 가 1초로 클램프돼도 상한 유지. 실제 수집과 함께는 미실측 → **수정 회차 검증 항목**(3매장 1회) | **개선안** |
+| S3 | 저점수만 요청(별점 필터·정렬) | 119행 `statusType=EXPOSE&startDateTime=${startDate}&exclusiveEndDateTime=${endDate}&size=5` | [실측] 리뷰 관리 화면 UI 관찰: 필터는 **기간**(오늘/최근 1주일/1개월/3개월/6개월/1년 + 날짜 직접 선택)과 **상태**(노출 리뷰/차단 리뷰/게시 중단 리뷰), 탭은 전체/답변/미답변. **별점 필터·정렬 없음**(본문의 별점 문구는 통계 표기 `평균별점` 뿐). UI 조작 시 실제 요청(xmlhttprequest): `storeId=780573&page=1&statusType=EXPOSE&startDateTime=2026-08-23&exclusiveEndDateTime=2026-09-23&size=5`, 차단 리뷰 → `statusType=BLIND`, 게시 중단 리뷰 → `statusType=SUSPEND`. 파라미터를 지어내 보내지 않았다(403 0건) | 0 | 해당 없음 | **해당 없음(UI 에 수단 없음)** |
+| S4 | 제한적 동시 호출: page 1 단독 → 2페이지 이후 동시 2개 (사용자 허락 후 참 제육 1회) | 185~186행 `for (let p = 2; p <= pages; p++) { const r = await page(store.id, p);` / 21행 `**매장·페이지 모두 순차 호출**: 병렬로 부르면 API가 잘못된 \`total\`을 반환하는 사례가 있었다.` | [실측] 참 제육(782948) B: 43페이지 **7,968ms**(page 1 단독 333ms) vs A(기준선 순차) **17,389ms** → **−9,421ms(−54%)**. 요청당 평균 361ms(210/609) — 동시 2개에도 서버가 느려지지 않음. HTTP 200 43/43, `code` SUCCESS 43/43, **모든 페이지의 `total` = 211(43/43 일치)**, `pageNumber` 정상, n = uniq = 211, **onlyA 0 · onlyB 0**(집합 동일), 403·오류 0 | 3매장 환산 40.3 → ≈20초(**≈−20초**)[추론: 1매장 비례. 2매장은 미실측] | v3(2026-06-22) 사고는 매장×페이지 전면 `Promise.all` 이었고 total 을 병렬 응답에서 읽었다. 이번 설계는 total 을 page 1 에서만 읽고(현재 코드와 동일) 동시성 2. 그래도 [의도된 동작] 목록의 설계를 바꾸는 것이라 **사용자 결정, 기본값 미채택**. 채택 시 검증: 3매장 A/B 각 1회 + 다른 날 1회, 합격 기준 동일. 동시 3 이상은 실측 없음 — 올리지 말 것 | **개선안(조건부, 사용자 결정)** |
+| S5 | Step 2 코드 블록(8.1KB) 생성·전송 비용 절감 — (i) 폴링·결과 읽기를 `browser_batch` 로 묶기(이번 회차 실행 방식) (ii) 수집 스크립트를 같은 오리진 `localStorage` 에 버전 키와 함께 1회 저장하고 이후 실행은 한 줄 호출 | 93~242행 스크립트 전체(매 실행마다 에이전트가 다시 내보냄) | [실측] 배치 발행 06:05:16.66 → 페이지 실행 시작 06:05:58.72 = **42.0초**, 수집 자체(40.3초)와 맞먹는다. (i) 는 이번 회차에서 그대로 실행: 읽기 4회를 1왕복(12.1초, 생성 포함)에, 폴링 대기+확인을 1왕복에 — 실행 단위 절단 한계 유지 확인 | (i) 왕복 2~3회분 ≈10~15초[추론] (ii) ≈40초[추론 — 절감치 미실측] | (i) 결과 집합 무관. (ii) 세션·회차 간 stale 코드 위험(SKILL.md 수정 뒤 옛 스크립트가 살아남음) → 버전 키·md5 대조 없이는 위험, 배민 S6(ii) 와 같은 판단. **절감치는 실측 아님** | **후보(승인 필요)** |
+
+하지 않은 것(지시대로): 매장 간 500ms 대기(합 1.5초), `size` 변경 실측, 결과 읽기 분할을 한 번에 읽기로 되돌리기, 동시 3 이상.
+
+### 실험 코드 원문 (수정 회차가 그대로 쓴다)
+
+S2 — 폴링 대체 코드(실제 수집에는 미적용, 가짜 플래그 `window._fakeRes` 로 12초 대기만 검증):
+```javascript
+const t0 = Date.now();
+while (!window._res && !window._err && Date.now() - t0 < 30000) await new Promise(r => setTimeout(r, 250));
+window._err ? 'ERROR:' + window._err : window._res ? 'DONE' : 'LOG:' + JSON.stringify(window._log.slice(-4))
+```
+
+S4 — `_s4(storeId, conc)` (참 제육 `_s4('782948', 2)` 1회):
+```javascript
+window._s4 = async function (storeId, conc) {
+  const sd = window._resA[0].startDate, ed = window._resA[0].endDate;
+  const API = '/api/v1/merchant/reviews/search';
+  const url = p => `${API}?storeId=${storeId}&page=${p}&statusType=EXPOSE&startDateTime=${sd}&exclusiveEndDateTime=${ed}&size=5`;
+  const t0 = performance.now(); const errs = []; const codes = {}; const totals = {};
+  const fetchPage = async p => {
+    const r = await fetch(url(p), { credentials: 'same-origin', headers: { Accept: 'application/json' } });
+    codes[r.status] = (codes[r.status] || 0) + 1;
+    if (!r.ok) { errs.push([p, 'HTTP ' + r.status]); return { p, content: [] }; }
+    const j = await r.json();
+    if (j.code !== 'SUCCESS') { errs.push([p, 'code ' + j.code]); return { p, content: [] }; }
+    totals[j.data.total] = (totals[j.data.total] || 0) + 1;
+    return { p, total: j.data.total, content: j.data.content, pageNumber: j.data.pageNumber };
+  };
+  const first = await fetchPage(1);                      // page 1 단독 (total은 여기서만 읽음 — 현재 코드와 동일)
+  const t1 = performance.now();
+  const total = first.total, pages = Math.max(1, Math.ceil(total / 5));
+  const results = { 1: first }; let next = 2;
+  const worker = async () => { while (next <= pages) { const p = next++; results[p] = await fetchPage(p); } };
+  await Promise.all(Array.from({ length: conc }, worker));   // 2페이지 이후를 동시 conc개
+  const all = []; for (let p = 1; p <= pages; p++) all.push(...(results[p].content || []));
+  const ids = all.map(r => r.orderReviewId);
+  const pageNums = Object.values(results).map(r => r.pageNumber);
+  return { storeId, conc, total, pages, n: all.length, uniq: new Set(ids).size, errs, codes, totals, p1ms: +(t1 - t0).toFixed(0), ms: +(performance.now() - t0).toFixed(0), ids, pageNumOk: pageNums.every((v, i) => typeof v === 'number') };
+};
+```
+결과 원문: `{"storeId":"782948","conc":2,"total":211,"pages":43,"n":211,"uniq":211,"errs":[],"codes":{"200":43},"totals":{"211":43},"p1ms":333,"ms":7968,"pageNumOk":true,"onlyA":[],"onlyB":[],"Alen":211}` / Resource Timing: `{"n":43,"avg":361.1,"min":210.1,"max":608.8,"ttfbAvg":355.4,"span":7966}`.
+
+S1 계측(스크립트 무변경, 수집 뒤 읽기만):
+```javascript
+performance.getEntriesByType('resource').filter(e => e.name.includes('/api/v1/merchant/reviews/search')).map(e => ({ s: new URL(e.name).searchParams.get('storeId'), p: +new URL(e.name).searchParams.get('page'), st: e.startTime, d: e.duration, ttfb: e.responseStart - e.requestStart, dl: e.responseEnd - e.responseStart, conn: e.requestStart - e.startTime }))
+```
+결과 원문(매장별 요약): `{"780573":{"n":34,"avg":396.1,"min":222.8,"max":660.8,"ttfbAvg":393.9,"dlAvg":1.1,"connAvg":1.1,"span":13515,"gapAvg":1.4},"782948":{"n":43,"avg":403,"min":215.9,"max":692.8,"ttfbAvg":400,"dlAvg":2,"connAvg":1,"span":17389,"gapAvg":1.5},"987605":{"n":19,"avg":410.9,"min":261.5,"max":566.1,"ttfbAvg":408.8,"dlAvg":1.2,"connAvg":1,"span":7831,"gapAvg":1.3}}`
+
+## 정확성 판정 (이번 회차 지시 P1~P7)
+
+- **P1 Step 0 한 줄 판정(배민 결함 3 이식 여부)** → **재현됨 → 결함 1.** 없는 경로·없는 모듈·마운트 없는 HOME 세 가지로 `UNLOCKED` + 백업 블록 통과 + 3-2 가 보이지 않는 경로에 새 엑셀을 만드는 연쇄까지 실측(위 결함 1 행). 세 줄 분리(참고로 같은 PC 에서 `FOLDER_OK / OPENPYXL_OK / UNLOCKED` 출력 확인)가 수정 방향.
+- **P2 이월 개선안 1·2·3** → 셋 다 미해결(코드 원문은 직전 기준선 판정표). 순위 갱신: 3(정확 일치·중복·ratingFail) → **1**(페이지 밀림 실측이 근거), 2(재열기) → 2, 1(null 경로 reason) → 3.
+- **P3 `날짜` 열 orderedAt→createdAt 보류 건(결정은 사용자)** — 이번 수집 숫자:
+  - `orderedAt < startDate`(주문일은 범위 밖, 리뷰는 범위 안): 김치찜 9 / 참 제육 23 / 곱도리 11 = **43건 / 469건(9.2%)**. 9/9 는 58/580(10%).
+  - 그중 **저점수 0건** → 오늘 저점수 4건(1VNPTE 09-21 · 02LD1V 09-14 · 0FJ8NT 09-11 · 2VXGS1 08-27, 모두 주문일)은 전환 여부와 무관하게 삭제·추가 건수가 같다(T2 `new 1, deleted 3`).
+  - **바꾸면**: 열 값이 리뷰 작성일이 되어 API 범위(`createdAt` 기준)와 엑셀 날짜가 일치하고 배민 엑셀(리뷰 작성일)과 의미가 같아진다. 기존 행 4건의 날짜를 이번 값으로 덮어써야 한 파일에 두 의미가 섞이지 않는다(개선안 ④·⑤ 의 갱신 경로). `createdAt` 최소값 = startDate 이므로 "1개월 현황" 표에 범위 밖 날짜가 남지 않는다.
+  - **안 바꾸면**: 주문일이 컷오프보다 오래된 행이 현황판에 남을 수 있다(오늘 저점수 중 0건, 전체 리뷰 기준 9.2%). 정렬(399행 `parse(r[1])`)도 주문일 기준으로 유지된다. 어느 쪽도 데이터 유실은 없다.
+- **P4 응답 스키마** → **동일.** 최상위 `data, error, code`(정상 `error:null, code:"SUCCESS"`) / `data` `content, pageNumber, pageSize, total` / 리뷰 18키 `orderReviewId, storeId, orderId, abbrOrderId, comment, memberId, images, replies, rating, statusType, tags, createdAt, modifiedAt, orderedAt, orderInfo, orderCount, customerName, orderType`(순서 동일) / `orderInfo` 원소 `dishId, createdAt, dishName`. 타입: `rating` number, `createdAt/orderedAt` `"2026-09-23T15:06…"`(로컬 KST, TZ 없음), `memberId` null, `orderType` `REGULAR`/**`PICKUP`(신규 관측)**. `createdAt` 최소값 = `2026-08-23` = startDate(3매장). 없는 storeId(1) → HTTP 200 `{data:null, code:"10001", error:{message:"상점 정보를 찾을 수 없습니다."}}` → 스킬 `reason` = `API 오류 10001: 상점 정보를 찾을 수 없습니다.` **보고됨.** 마지막 페이지 다음(p35): 200, `total:0, content:[], pageNumber:0`(9/9 와 동일 — total 은 page 1 에서만).
+- **P5 저장 스크립트 사본 dry-run**(PC `$HOME/skillwork/`, 스크립트는 PC 에서 clone 한 저장소 SKILL.md 325~437행을 `sed` 로 추출, `ast.parse` 통과) — 실제 파일 md5 `5508d87b…` · mtime `2026-09-20 01:33:49` **4회 확인 불변**:
+  - T2 현재 스크립트 / 원본 사본 → `{"new":1,"deleted":3,"rows":4,"untouched_rows":0}` — 삭제 114SR5·0E0R5H(김치찜)·14D7ZC(곱도리), 신규 1VNPTE. 재열기 4행 = kept 3 + new 1.
+  - T3 가짜 행 2개(참 제육 `FAKE01` 2026-09-10 범위 안, `FAKE02` 2026-07-01 범위 밖 — 둘 다 이번 수집에 없음) → `{"new":1,"deleted":5,"rows":4}` — **삭제 기능 생존.**
+  - T4 가짜 행 2개 + 참 제육 `ok:false` → `{"new":1,"deleted":3,"rows":6,"untouched_rows":4,"skipped":[["참 제육","TEST 강제 실패(사본 dry-run)"]]}` — 참 제육 4행(실제 2 + 가짜 2) 보존, **`ok_stores` 필터 생존.**
+  - T5 3매장 전부 `ok:false` → `{"saved": false, "reason": "정상 수집된 매장이 없어 저장하지 않음", …}`, 사본 md5 불변.
+  - T6(결함 1 연쇄) 마운트 없는 HOME 경로 → `[OK] 새 엑셀 생성`, `{"saved": true, "new": 4, "rows": 4}` — 보이지 않는 경로에 저장 "성공".
+- **P6 isLogin 정규식(2회 연속 [추론] → [실측])** — 수집·실험이 끝난 뒤 사용자가 로그아웃. 매장 URL navigate → `https://store.coupangeats.com/merchant/login?redirectUrl=/merchant/management/reviews/780573`(host `store.coupangeats.com`, path `/merchant/login`, 쿼리 키 `[redirectUrl]` 1개). Step 1 원문 반환: `{"st":"STATUS:401","url":"…/merchant/login?redirectUrl=/…","isLogin":true,"hasPw":true,"preview":"로그인\n아이디\n비밀번호\n아이디 저장\n로그인\n아이디/비밀번호 찾기\n|\n회원가입"}` → **중단 조건 셋(`isLogin`/`hasPw`/`STATUS:401`) 모두 성립, 결과 차단 없음.** fetch 는 리다이렉트 없이 401(`redirected=false, type=basic`, content-type 없음) → Step 2 의 401 경로(126행)도 성립. 부수 발견 → 결함 2(파라미터 2개 이상이면 차단).
+- **P7 양방향 대조표**
+
+| 방향 | 항목(출처) | 상대 스킬 해당 여부 | 근거 |
+|---|---|---|---|
+| 배민→쿠팡 | 결함 3(9/9) Step 0 세 줄 분리 | **해당 — 결함 1** | 39행 한 줄 그대로, 재현됨 |
+| 배민→쿠팡 | 결함 7(9/20)·정정 잘림 표기 `[TRUNCATED]` 통일 | 해당 없음(완료) | 쿠팡은 9/9 결함 2·정정 2 로 통일, 오늘 5곳 확인 |
+| 배민→쿠팡 | 결함 2(9/20) 반환값의 `location.href`(쿼리) → `[BLOCKED]` | **해당 — 결함 2(조건부)** | 73행 `url: location.href`. 차단 규칙 정밀화: 파라미터 2개 이상(`&`)일 때만. 오늘 쿠팡 리다이렉트는 1개라 통과 |
+| 배민→쿠팡 | 설치본 frontmatter `name` 따옴표로 md5 상이(9/23) | 해당 없음(현재) | 쿠팡 설치본 2행 `name: coupang-review` 따옴표 없음, md5 저장소와 동일. 재업로드 뒤 재확인 항목으로만(개정안 8) |
+| 배민→쿠팡 | hidden 게이트·`throttled`·스크린샷 깨우기 | 해당 없음[실측] | 쿠팡은 `fetch` 폴링이라 렌더링 정지 무관. 오늘 `hidden:false`. 영향은 매장 간 `setTimeout(500)` 과 S2 폴 간격의 1초 클램프 정도 |
+| 배민→쿠팡 | 개선안 ①(9/20) `countMatch` → `ok` 편입(수집<전체 ok:false, 초과 경고) | **해당 — 개선안 ①** | 쿠팡은 98% 규칙(227행). 페이지 밀림 실측이 근거 |
+| 배민→쿠팡 | 개선안 ② 자동 백업 / ③ 재열기 / ④ parseFail 10% | ② 완료(실사용) / ③ 개선안 ② / ④ 개선안 ① 일부 | — |
+| 배민→쿠팡 | 개정안 1 속도 기준선·벽시계 분해 상시화 / 2 localStorage 집합 보관 / 3 audit-only 계측 / 4 사본 dry-run / 7 C 항목 BLOCKED·TRUNCATED | 1·2·7 → 쿠팡 개정안 1·2·3 / 3·4 는 쿠팡 v2 에 이미 있음 | 이번 회차가 1·2·7 을 실제로 썼다 |
+| 배민→쿠팡 | 개정안 5 바이트 수 금지 / 6 문구 전체 검색 | 해당 없음(이미 있음) | 쿠팡 정정 1 · v2.1 |
+| 배민→쿠팡 | S1·S2·S5(스크롤)·S3(적용 대기)·S6(i)(블록 병합) | 해당 없음 | DOM 스크롤·다이얼로그가 없음. S6(ii) 코드 재주입만 쿠팡 S5(ii) 와 같은 성격(둘 다 후보) |
+| 쿠팡→배민 | 결함 1 Step 0 | 해당 없음 | 배민은 9/9 에 수정 |
+| 쿠팡→배민 | 결함 2 의 차단 규칙 정밀화(파라미터 2개 이상) | **해당 — 배민 점검표 C 항목·SKILL.md 문구 갱신 후보** | 배민 checklist C "쿼리스트링이 든 URL" → "파라미터 2개 이상인 URL". 배민 `?returnUrl=…&__ts=` 는 2개라 판정 불변 |
+| 쿠팡→배민 | 개선안 ① 페이지 밀림·orderReviewId 중복 | 해당 없음 | 배민은 `window._all[no]` 딕셔너리라 중복이 자연 제거되고 `expectedTotal` 정확 일치를 이미 채택 |
+| 쿠팡→배민 | 개선안 ⑤ kept 행 값 갱신(수정된 리뷰) | **해당 검토[추론]** | 배민 5-2 도 리뷰번호만 대조해 기존 행을 그대로 둔다(같은 구조). 배민 회차에서 판정 |
+| 쿠팡→배민 | S2 폴링 호출 안 대기 | 해당 없음 | 배민 `_scroll` 은 호출이 곧 대기(25초 배치) |
+| 쿠팡→배민 | S4 동시 호출 / S3 statusType 3값 | 해당 없음 | API 미사용 |
+| 쿠팡→배민 | P3 날짜 열 | 해당 없음 | 배민은 리뷰 작성일 사용 — 쿠팡이 배민에 맞출지의 문제 |
+
+## 실행 실측 기록
+
+- 실행 시각(UTC): navigate 06:04:08 → Step 1 `STATUS:200` → Step 2 06:05:58.72~06:06:38.97 → 결과 읽기 끝 06:06:55.79. 이후 스키마·10001·페이지 밀림 계측 ~06:12, S3 UI 관찰 06:12~06:20, S4 06:14, `[BLOCKED]`·잘림 프로브 06:16~06:18, P6 로그아웃 실측 06:21, 탭 닫음 06:22. 범위 `2026-08-23 ~ 2026-09-24`.
+- 실행 스크립트: Step 2 원문(93~242행)에 **audit-only 1줄**을 191행(`}` 페이지 루프 종료) 뒤·192행(`LOG(\`[${store.name}] 수집 …\`)`) 앞에 삽입: `window._all = Object.assign(window._all || {}, { [store.name]: { all, tEnd: performance.now() } });   // audit-only 계측 1줄 (판정 로직 무관)`. `diff` 로 이 1줄 외 차이 없음 확인. 폴링 표현식 끝에 시각 표기 `+ ' @' + new Date().toISOString().substring(11, 23)` 을 붙였다(판정 문자열 앞부분은 원문 그대로). Step 2 실행 전 별도 호출로 `performance.setResourceTimingBufferSize(3000); performance.clearResourceTimings();`.
+- 매장별 (apiTotal / collected / ratingFail / 페이지 / 소요 / 저점수 / 별점분포 1~5 / orderReviewId 유일 / abbrOrderId 유일 / statusType / orderType):
+  - 김치찜의 정석 780573: 166 / 166 / 0 / 34p / 13.5s / 2 / [1,0,1,3,161] / 166 / 166 / EXPOSE 166 / REGULAR 165·PICKUP 1
+  - 참 제육 782948: 211 / 211 / 0 / 43p / 17.4s / 2 / [1,1,0,0,209] / 211 / 211 / EXPOSE 211 / REGULAR 210·PICKUP 1
+  - 퍽퍽살이 싫어 내가 만든 곱도리 987605: 92 / 92 / 0 / 19p / 7.8s / 0 / [0,0,0,3,89] / 92 / 92 / EXPOSE 92 / REGULAR 92
+  - 3매장 `ok:true`, `failedPages:[]`, `authExpired:false`. 판정 요약 원문: `[["김치찜의 정석",true,"",166,166,0,2],["참 제육",true,"",211,211,0,2],["퍽퍽살이 싫어 내가 만든 곱도리",true,"",92,92,0,0]]`
+- 저점수 4건: 김치찜 **1VNPTE(3점, 주문 09-21, 신규)** · 02LD1V(1점, 09-14) / 참 제육 0FJ8NT(2점, 09-11) · 2VXGS1(1점, 08-27). **Step 3 미실행이라 엑셀에는 반영되지 않았다.** 실제 실행 시 예상: 신규 1(1VNPTE), 삭제 3(114SR5·14D7ZC 는 리뷰 작성일 범위 밖, **0E0R5H 는 게시중단**), 총 4행.
+- 0E0R5H(김치찜 3점, 09-20 실행에 저장): `statusType=EXPOSE` 결과에 없음 → UI "게시 중단 리뷰" 조회(`statusType=SUSPEND`)에 **동일 주문번호 0E0R5H, 3점, 2026-09-09, "※ 정책조치에 따라 게시가 중단된 리뷰입니다."** 로 표시됨. 스냅샷 동기화가 이 행을 지우는 것은 의도된 동작(수집 대상 = EXPOSE 만). 이런 삭제는 최종 보고에 "삭제 N건"으로만 나온다.
+- 수집 중 신규 리뷰: 김치찜 total 166(06:05:59) → 167(06:08, `createdAt 2026-09-23T15:06` KST) — 수집 종료(06:06:12 UTC = 15:06:12 KST) 직후 유입. 페이지 밀림 실측: p1 idx `[-1,0,1,2,3]`, p33 `[159..163]`(수집 때 160..164), p34 `[164,165]`(수집 때 165).
+- `orderedAt < startDate`: 9 / 23 / 11(합 43, 저점수 0). `createdAt` 최소 08-23 × 3, `orderedAt` 최소 08-06 / 07-30 / 08-02.
+- 응답 스키마: P4 절. 없는 storeId → `10001`. `exclusiveEndDateTime`: 스킬은 내일(09-24), UI 는 오늘(09-23)을 보내는데 **total 167 / 첫 5건 동일**(오늘 15:06 작성분 포함) — 차이 없음, 결함 아님.
+- UI 관찰(S3): 필터 기간 프리셋 6종(1개월 = 오늘−1개월 = 08-23, 스킬의 `monthsBack` 과 동일) + 날짜 직접 선택, 상태 3종 = `statusType` **EXPOSE / BLIND / SUSPEND**(UI 요청으로 확인), 탭 전체/답변/미답변, **별점 필터·정렬 없음**. UI 도 `size=5`.
+- `javascript_tool` 반환 한도: **정확히 1,000자**에서 `[TRUNCATED]`(`'A'×1000+'|END'`, `'가'×1000+'|END'` 둘 다 1,000자 뒤 표식). 전체 `_res` 1,216자(저점수 4건), 매장별 585 / 409 / 218자, 저점수 1건 239 / 134 / 103 / 97자, 요약 102자, `_log` 815자.
+- `[BLOCKED: Cookie/query string data]` 재현: 파라미터 2개 이상 URL 문자열을 담은 반환값 3/3 차단(`?a=1&b=2`, `?redirectUrl=/…&z=1`, `?returnUrl=…&__ts=123`), 1개 URL 4/4 통과(`?a=1`, `?page=1`, `?storeId=780573`, `?redirectUrl=/…`), host+path 만 통과.
+- S4: 위 속도 개선안. S2 가짜 플래그 실측: 12,257ms 대기 → 감지 지연 247ms.
+- P6: 로그아웃 후 매장 URL → `/merchant/login?redirectUrl=…`, `isLogin true / hasPw true / STATUS:401`. 본문 첫 줄 `로그인 아이디 비밀번호 아이디 저장 로그인 아이디/비밀번호 찾기 | 회원가입`. 사용자가 이후 직접 재로그인.
+- 저장 스크립트 dry-run: P5 절(T2~T6). 실제 파일 md5 `5508d87b1ad9e6f66c22a34f24a2971f`, mtime `2026-09-20 01:33:49.216` UTC 불변.
+- localStorage `_audit_A_*` 3건 점검 종료 시 삭제(`remaining: 0`). 탭 닫음(Step 4).
+
+## 미확정으로 남긴 것
+
+- Step 2 실행 도중 세션 만료(SPA 상태에서) 시 fetch 가 401 을 주는지 — P6 는 로그아웃 뒤 새 navigate 에서의 401 만 실증(126행 경로 자체는 성립).
+- S4 를 다른 매장·다른 날에도 돌렸을 때 total 일관성이 유지되는지 — 1매장 1회 실측뿐. 동시 3 이상은 미실측.
+- S2 후보를 실제 수집과 함께 돌렸을 때(폴링 중 페이지 CPU 부하) 부작용이 없는지 — 가짜 플래그 실측뿐.
+- S5(ii) 스크립트 재주입의 절감치·stale 위험 — 미실측.
+- 개선안 ⑤ 근거인 "수정된 리뷰" 실제 빈도(`modifiedAt ≠ createdAt` 건수) — 이번에 집계하지 않음.
+- `statusType` 틀린 값(예: `EXPOSED`)이 10007 인지 — WAF 규칙상 미실측(490행 "추정, 미실측" 유지).
+- 쿠팡 로그인 리다이렉트에 두 번째 쿼리 파라미터가 붙는 조건 — 만들 수 없음(결함 2 의 조건부 부분).
+
+## 점검표 개정안
+
+1. **"속도 기준선"·"속도 개선안" 절 상시화 여부.** 권고(배민 2회차 개정안 1 과 동일 결론): 기준선 표(매장별 apiTotal·collected·ratingFail·저점수·페이지 수·페이지당 ms·TTFB·매장 소요) + 전체 항목(수집 시작→완료, 폴링 횟수·시각, 감지 지연, 결과 읽기 횟수, 벽시계, 도구 호출 수)은 **상시**(계측은 Resource Timing 읽기와 폴링 시각 표기뿐이라 판정 로직 무변경), A/B 실험 절(S1~S5 형식)은 **사용자가 속도를 목표로 지시한 회차에만**.
+2. **집합 보관 방법 고정:** 결과 읽기 직후 같은 오리진 `localStorage` `_audit_A_<매장>` 에 orderReviewId 배열 저장 → A/B 대조가 페이지 안에서 끝난다(이번 실측: 로그아웃 뒤에도 남아 삭제 가능). 점검 종료 시 삭제.
+3. **C 항목에 "도구가 결과를 차단·절단하는 경로" 추가**(배민 개정안 7 이관, 규칙 정밀화): 반환값에 **쿼리 파라미터 2개 이상(`&`)인 URL** 이 들어가면 `[BLOCKED: Cookie/query string data]`, **정확히 1,000자**를 넘으면 끝에 `[TRUNCATED]`. 파라미터 1개는 통과하지만 규칙에 기대지 말 것.
+4. **A 항목 실측 수치 갱신:** 전체 `_res` 1,216자 / 저점수 4건(2026-09-23), 매장별 585·409·218자, 저점수 1건당 97~239자, 요약 102자. "1,243자/5건, 97~162자" 는 낡음.
+5. **B 항목에 `statusType` 유효값 3개 기록:** `EXPOSE`(노출) / `BLIND`(차단) / `SUSPEND`(게시 중단) — UI 요청으로 실측. "틀린 값 → 10007" 은 계속 미실측(WAF).
+6. **[의도된 동작]에 추가:** "게시중단(SUSPEND)·차단(BLIND)으로 바뀐 리뷰는 수집 대상이 아니며 그 저점수 행은 다음 실행에서 삭제된다(2026-09-23 0E0R5H)". 다음 회차가 결함으로 올리지 않도록.
+7. **[의도된 동작]에 추가:** "`exclusiveEndDateTime` 은 내일 날짜(111행). UI 는 오늘을 보내지만 결과가 같다(실측)". 결함 아님.
+8. **[시작 전 확인 ②]에 추가**(배민 검증 회차 2 이관): 설치본 md5 가 다르면 먼저 frontmatter `name` 따옴표 차이인지 3행 이후 본문 md5 로 대조. 쿠팡은 오늘 해당 없음(따옴표 없음).
+9. **P1 재현 절차를 점검표에:** Step 0 는 "없는 경로로 한 번 돌려 `NO_FOLDER` 가 찍히는지"를 매 회차 확인(세 줄 분리 후 검증용).
+10. **[의도된 동작] "매장·페이지 모두 순차 호출" 항목:** S4 채택 시 "page 1 단독 → 2페이지 이후 동시 2개(2026-09-23 실측)" 로 갱신하고 v3 사고 조건(전면 병렬·total 을 병렬 응답에서 읽음)을 병기. 미채택이면 그대로 두되 근거를 그 사고 조건으로 좁혀 적을 것.
+11. **[시작 전 확인 ③]에 P6 절차화:** 로그아웃 실측은 수집·실험이 끝난 뒤 사용자 동의 하에 1회, 기록 항목은 host+path·쿼리 키 목록·`isLogin`·`hasPw`·fetch 상태. 이번에 [추론] 항목이 해소됐으므로 다음 회차부터는 "변경 의심 시에만".
+12. **결과 읽기 형식:** 점검표 A 항목에 "읽기 4회를 `browser_batch` 1왕복으로 실행해도 실행 단위 절단(1,000자)은 그대로 적용된다(실측)" 명시 — "한 번에 읽기로 되돌리기"와 혼동 방지.
+13. **머리말 버전 줄:** v2.1 → v3 로 갱신하며 이번 회차 채택분을 적을 것(2차 커밋).
+
+## 다음 점검에서 대조할 것
+
+- 사용자가 고른 결함·개선안·속도 항목의 수정 반영 여부. 특히 결함 1 세 줄 분리 후 없는 경로에서 `NO_FOLDER`, 개선안 ① 채택 시 3매장 정상 경로가 `ok:true` 를 유지하는지(정확 일치 조건이 오늘 3/3 성립하는지 재확인).
+- S4 채택 시 3매장 A/B + 다른 날 1회, 모든 페이지 `total` 일치 여부. S2 채택 시 실제 수집과 함께 폴링 2회로 끝나는지, 감지 지연.
+- 0E0R5H(게시중단) 가 실제 실행에서 엑셀에서 삭제되는지, 1VNPTE 가 신규로 들어가는지.
+- 김치찜 `orderType PICKUP` 등 신규 값이 늘어나는지(현재 스킬 동작 무관).
+- 설치본 md5 가 저장소 `SKILL.md`(수정 회차 버전)와 같은지 — 다르면 frontmatter `name` 따옴표부터(개정안 8).
+- 쿠팡 로그인 리다이렉트 URL 의 쿼리 파라미터 수(오늘 1개 `redirectUrl`).
+- Resource Timing 기준 페이지당 ms(오늘 396~411, TTFB 394~409)와 총 페이지 수(96).
+
+# 수정 회차에 적용할 것 (점검표에서 옮김 — 다음 단계용)
+
+- **수정은 저장소 `SKILL.md` 에서 한다.** 설치본을 직접 고치면 세션이 끝나며 사라진다. 저장소에 push 한 뒤 그것으로 패키징해라.
+- **한 번의 수정 → 한 번의 패키징 → 한 번의 재설치.** 중간에 다른 세션을 열면 그 세션은 옛 캐시를 읽고 그 위에 수정한다. 먼저 한 수정이 조용히 사라진다.
+- **수정 후 반드시 파일을 다시 열어 눈으로 확인하고 나서 "완료"라고 말해라.** 사용자가 정한 상시 방침이다.
+- **고친 뒤 실제 사이트에서 1회 실행해라.** 사용자가 정한 방침이다. 속도 항목은 이번 기준선의 합격 기준(orderReviewId 집합 동일 + apiTotal 동일 + 403·오류 0)으로 3매장 재확인.
+- **같은 개념을 두 곳에서 고칠 때는 기준을 대조해라.** 순차 호출(21·88행), 잘림·차단(23·68~69·82·274·481행), `ok` 판정(32·222~228행·트러블슈팅)은 같은 규칙이 여러 곳에 있다.
+- **문구 교체는 지목된 곳이 아니라 파일 전체 검색으로 처리해라.** 고치기 전에 옛 문구의 핵심 어절로 `grep` 해 `SKILL.md` · `checklist.md` · `README.md` 에서 동일 취지 문장을 전부 찾아 함께 고치고, 고친 뒤 같은 검색을 다시 돌려라.
+- **판정 조건을 완화하는 수정을 했으면 원래 잡히던 실패가 여전히 잡히는지 다시 확인해라.** 개선안 ① 은 강화지만 정상 경로 3매장이 통과하는지 반드시 확인.
+- **"되돌리면 안 되는 것" 표에 있는 것을 건드렸으면 그 표도 같이 갱신해라.** S4 는 "순차 호출" 항목, 결함 2 는 "결과에 URL 을 담지 않음" 항목과 접한다.
+- **수정 기록은 행 번호 대신 절 이름·함수명으로 적어라.**
+- **수정과 검증은 다른 세션에서 한다.**
+- 작업 경로 세 단계: 저장소 `SKILL.md` 수정 → push / `.skill` 재패키징 / **사용자가 Claude 설정에서 재업로드**. 재업로드 전에는 실행에 반영되지 않는다.
+
+---
+
+# 이전 기록 (2026-09-09 회차 + 수정·기록정정·정정 회차 — 원문 보존)
+
 # 정정 회차 (2026-09-09 — 검증 회차가 올린 3건 처리: 2건 수정 · 1건 기록만)
 
 1차 정기점검의 **검증 회차**(다른 세션)가 새로 발견한 3건을 사용자가 판정해,
