@@ -65,6 +65,8 @@ md5sum coupang-review-skill/SKILL.md "<Base directory>/SKILL.md"
 ```
 
 - **md5 동일** → 정상. 그대로 진행한다.
+  저장소에 따옴표 형태(`name: "coupang-review"`)를 둔 뒤 재업로드하면 설치본 md5 가 저장소와 같다
+  (2026-09-23 실측: 설치본·저장소 모두 563행 md5 `71068968f4b3b99a792cb625a99a658c`).
 - **다르면 먼저 frontmatter 2행 `name` 의 따옴표 차이인지 본다.** 재업로드 뒤 설치본의 `name` 값에
   따옴표가 붙어 md5 가 달라진 사례가 있다(배민 2026-09-23 실측, 본문은 동일). 저장소는 그래서
   `name: "coupang-review"` 형태를 쓴다(2026-09-23). `tail -n +3 SKILL.md | md5sum` 으로 본문 md5 를
