@@ -9,9 +9,16 @@
 해야 한다.** 한쪽만 고치면 다음 회차가 틀린 지시를 먼저 읽는다.
 채택 여부를 묻기 전에 고치지 마라.
 
-버전: v2.1 (2026-09-09 — 검증 회차 지적 반영: [의도된 동작] 잘림 서술 정정,
-[수정 회차에 적용할 것] 에 "문구 교체는 파일 전체 검색으로" 1건 추가.
-v2: 1회차 점검 개정안 10건 반영. v1: baemin-review 점검표를 이 스킬 구조에 맞춰 옮김)
+버전: v3 (2026-09-23 2회차 수정 회차 — 개정안 1~14 채택: 속도 기준선 표·전체 항목 상시화(A/B
+실험 절은 속도 목표 회차만), orderReviewId 집합 localStorage 보관, C 항목에 도구 차단·절단 경로
+(파라미터 2개 이상 URL → `[BLOCKED]`, 정확히 1,000자 → `[TRUNCATED]`), A 항목 실측 수치 갱신,
+B 항목 `statusType` 3값, [의도된 동작]에 게시중단·차단 삭제 / `exclusiveEndDateTime` 내일 /
+순차 호출 근거 좁힘 / 결과 읽기 `browser_batch` 1왕복, [시작 전 확인 ②] frontmatter `name`
+따옴표 대조, P1 없는 경로 재현 절차, P6 로그아웃 실측 절차화, 날짜 열 "둘 다 `createdAt`",
+"되돌리면 안 되는 것" 표 갱신.
+v2.1: 2026-09-09 검증 회차 지적 반영 — [의도된 동작] 잘림 서술 정정, [수정 회차에 적용할 것] 에
+"문구 교체는 파일 전체 검색으로" 1건 추가. v2: 1회차 점검 개정안 10건 반영.
+v1: baemin-review 점검표를 이 스킬 구조에 맞춰 옮김)
 
 ---
 
@@ -58,7 +65,11 @@ md5sum coupang-review-skill/SKILL.md "<Base directory>/SKILL.md"
 ```
 
 - **md5 동일** → 정상. 그대로 진행한다.
-- **다름** → 어느 쪽이 최신인지 판정하고 **그 사실부터 보고해라.**
+- **다르면 먼저 frontmatter 2행 `name` 의 따옴표 차이인지 본다.** 재업로드 뒤 설치본의 `name` 값에
+  따옴표가 붙어 md5 가 달라진 사례가 있다(배민 2026-09-23 실측, 본문은 동일). 저장소는 그래서
+  `name: "coupang-review"` 형태를 쓴다(2026-09-23). `tail -n +3 SKILL.md | md5sum` 으로 본문 md5 를
+  대조해 같으면 정상이다. 본문까지 다르면 아래로.
+- **다름(본문)** → 어느 쪽이 최신인지 판정하고 **그 사실부터 보고해라.**
   저장소가 최신이면 "재업로드가 안 된 것"이고, 설치본이 최신이면
   "저장소에 push 가 안 된 것"이다. 둘은 대응이 다르다.
   진단은 **저장소 사본을 기준으로** 하되, 설치본과 다른 부분은 따로 적어라.
@@ -86,6 +97,21 @@ md5sum coupang-review-skill/SKILL.md "<Base directory>/SKILL.md"
   Step 2 스크립트에 `window._all[store.name] = all` 같은 대입 한 줄을 넣는 것은
   된다. 단 **판정 로직(`ok`·`reason`·`pick()` 후보·페이지 루프)은 건드리지 않는다.**
   넣은 줄은 기준선 "실행 실측 기록"에 그대로 적어라.
+- **속도 기준선은 매 회차 상시로 잰다**(2026-09-23 개정안 1). 페이지별 시간은 스크립트가 아니라
+  `performance.getEntriesByType('resource')`(Resource Timing, 실행 전 `setResourceTimingBufferSize(3000)`
+  + `clearResourceTimings()`)에서 읽고, 폴링 반환 끝에 시각(`+ ' @' + new Date().toISOString().substring(11, 23)`)을
+  붙인다 — 둘 다 판정 로직 무변경. 기준선의 "속도 기준선" 표(매장별 apiTotal·collected·ratingFail·저점수·
+  페이지 수·페이지당 평균 ms(최소/최대)·TTFB·매장 소요)와 전체 항목(수집 시작→완료, 폴링 횟수·시각,
+  감지 지연, 결과 읽기 횟수, 벽시계, 도구 호출 수)을 직전 회차와 같은 열로 적는다.
+  **A/B 실험 절(후보별 (a)~(d) + 합격 기준)은 사용자가 속도를 목표로 지시한 회차에만 한다.**
+- **orderReviewId 집합은 같은 오리진 `localStorage` 에 보관해라**(개정안 2): 결과 읽기 직후
+  `localStorage.setItem('_audit_A_<매장>', JSON.stringify(ids))`. navigate·로그아웃 뒤에도 남아 A/B 대조가
+  페이지 안에서 끝난다(2026-09-23 실측). 점검 종료 시 삭제한다.
+- **로그아웃 실측(P6)은 변경 의심 시에만**, 수집·실험이 전부 끝난 뒤 사용자 동의 하에 1회(개정안 11).
+  기록 항목: `location.host + location.pathname`·쿼리 키 목록(값은 적지 않는다)·`isLogin`·`hasPw`·fetch
+  상태. 2026-09-23 실측: `store.coupangeats.com/merchant/login`, 쿼리 키 `[redirectUrl]`, 401.
+- **Step 0 는 없는 경로로 한 번 더 돌려라**(개정안 9): `HOME=<빈 폴더> bash -c '<세 줄>'` 로
+  `NO_FOLDER` 가 찍히고 백업 블록이 `mkdir -p` 없이 건너뛰는지. 2026-09-23 결함 1 의 재발 검사다.
 
 실행이 불가능하면 그 사실을 명시하고 **실행으로만 확인되는 항목을 전부
 [추론]으로 표시해라.** 문서만 읽고 "필드명이 맞다 / API 가 정상이다" 라고 쓰지 마라.
@@ -118,11 +144,22 @@ md5sum coupang-review-skill/SKILL.md "<Base directory>/SKILL.md"
   사용자가 알고 선택했다. 이 엑셀은 누적 아카이브가 아니라 최근 현황판이다.
 - **`size=5` 고정.** 다른 값은 WAF 가 403 을 돌려준다. 페이지가 많아 느려도
   바꾸지 않는다.
-- **매장·페이지 모두 순차 호출.** 병렬로 부르면 API 가 잘못된 `total` 을 반환한 전력이 있다.
+- **매장·페이지 모두 순차 호출.** 2026-06-22 에 매장×페이지를 전부 동시에 부르고(`Promise.all`)
+  `total` 을 그 병렬 응답에서 읽었을 때 잘못된 `total` 이 온 전력이 있다(곱도리 45, 실제 261).
+  2026-09-23 S4 실측(참 제육, page 1 단독 뒤 동시 2개: 43페이지 `total` 43/43 일치·집합 동일·−54%)은
+  기록으로만 남기고 순차를 유지한다 — 사용자 결정(미채택). 바꾸려면 사용자 승인.
 - **DOM 이 아니라 API 를 쓴다.** 쿠팡이츠 API 는 same-origin 이라 된다.
   배민 방식(DOM 스크롤)을 이식하려 하지 마라 — 두 스킬의 구조가 다른 이유다.
 - **조회 기간은 최근 1개월.** 월말 overflow 는 해당 월 마지막 날로 클램핑한다.
-- **결과를 매장 단위로 나눠 읽는다.** 반환값이 약 1,000자에서 끝에 `[TRUNCATED]` 표식과 함께 잘린다.
+- **결과를 매장 단위로 나눠 읽는다.** 반환값이 정확히 1,000자에서 끝에 `[TRUNCATED]` 표식과 함께
+  잘린다. 요약 1 + 매장 3 의 JS 4개를 `browser_batch` 1왕복으로 묶어 실행하는 것은 나눠 읽기다 —
+  실행 단위마다 절단이 그대로 적용된다(2026-09-23 실측). "한 번에 전체 읽기"와 혼동하지 말 것.
+- **게시중단(`SUSPEND`)·차단(`BLIND`)으로 바뀐 리뷰는 수집 대상이 아니다.** 수집은 `statusType=EXPOSE`
+  뿐이라 그 상태로 바뀐 저점수 행은 다음 실행에서 삭제된다(2026-09-23 김치찜 0E0R5H). 결함 아님.
+- **`exclusiveEndDateTime` 은 내일 날짜다.** UI 는 오늘을 보내지만 결과가 같다(2026-09-23 실측:
+  total·첫 5건 동일). 결함 아님.
+- **엑셀 `날짜` 열은 리뷰 작성일(`createdAt`)이고 API 필터도 `createdAt` 이다 — 둘 다 같은 필드**
+  (2026-09-23 변경. 그전엔 열이 주문일이었다). 삭제 판정은 여전히 주문번호 대조뿐이다.
 - **엑셀은 플랫폼별로 분리한다.** 배민과 합치지 않는다.
 - **날짜는 `YYYY-MM-DD`.** 배민 스킬과 통일한 형식이다.
 - **`STATUS:403` 은 중단 조건이 아니다.** WAF 제약일 수 있어 Step 2 로 진행한다.
@@ -142,27 +179,33 @@ md5sum coupang-review-skill/SKILL.md "<Base directory>/SKILL.md"
 | 별점을 못 읽은 리뷰를 버리지 않음 | `ratingFail` 로 세고 `[별점확인필요]` 로 남긴다. 4~5점으로 **확인된** 것만 제외 | Step 2 `one()` |
 | 실패 매장도 배열에 남김 | 사람이 골라내면 저장 스크립트가 판단할 근거가 사라짐 | Step 3-1 |
 | `ws.delete_rows` | 셀을 None 으로 비우면 빈 행이 누적돼 파일이 계속 커짐 | Step 3-2 |
-| 결과에 URL(쿼리스트링)을 담지 않음 | 담으면 브라우저 도구가 `[BLOCKED]` 로 결과를 막아 실제 상태 코드를 못 봄 | Step 1 |
-| 수집은 백그라운드 + 폴링 | 동기로 기다리면 45초 CDP 타임아웃에 걸림 | Step 2 · 완료 폴링 |
+| 반환 JSON 에 `location.href` 를 넣지 않음(`path: location.host + location.pathname` 만), `isLogin` 은 pathname 기준, `[BLOCKED:` 면 로그인 필요로 간주 | 쿼리 파라미터 2개 이상인 URL 이 들어가면 `[BLOCKED: Cookie/query string data]` 로 결과 전체가 막혀 상태 코드를 못 봄. 로그인 리다이렉트 URL 에 쿼리가 붙는다(2026-09-23). "무시하고 진행"으로 되돌리면 로그인 확인이 건너뛰어짐 | Step 1 |
+| 수집은 백그라운드 + 폴링(호출 안에서 완료까지 대기, 상한 30초·최대 14회) | 동기로 기다리면 45초 CDP 타임아웃에 걸림. 상한을 45초 가까이 올리면 같은 일이 남 | Step 2 · 완료 폴링 |
+| Step 0 세 검사 분리 출력(`FOLDER_OK`/`OPENPYXL_OK`/`UNLOCKED`) + 백업 블록의 폴더 가드 | `A && B && C && echo LOCKED \|\| echo UNLOCKED` 한 줄로 되돌리면 폴더·openpyxl 부재가 `UNLOCKED` 로 찍혀 통과하고, `mkdir -p` 가 마운트 안 된 로컬 경로를 만들어 Step 3 가 보이지 않는 파일에 "저장 완료"를 보고함(2026-09-23 재현) | Step 0 |
+| 정확 일치 판정(`collected < apiTotal` → `ok:false`, 초과·중복은 `warn`) + orderReviewId 중복 제거 + `ratingFail` 10% 임계 | 98% 규칙으로 되돌리면 페이지 밀림으로 생기는 ±1건 오차가 통과함(2026-09-23 실측) | Step 2 `one()` |
+| 저장 후 재열기 검증(`verified`) | 없으면 저장 결과가 예상과 달라도 "저장 완료"로 보고됨 | Step 3-2 |
+| `날짜` 열 = 리뷰 작성일(`createdAt` 우선) + kept 행 날짜 덮어쓰기(파싱될 때만) | `orderedAt` 우선으로 되돌리면 API 범위와 열이 다시 어긋나고, 덮어쓰기를 빼면 한 파일에 주문일·작성일이 섞임 | Step 2 `one()` · Step 3-2 |
 
 [특히 이런 걸 찾아줘]
 
 ■ A. 문서와 코드가 어긋나는 곳
    - 매장 정보 표(storeId 3개)가 실제 URL·응답과 맞는지
    - 트러블슈팅 표의 증상·원인·대응이 실제 코드 동작과 맞는지
-   - 실측 수치가 지금도 유효한지. 현재 기준: 전체 `_res` JSON 1,243자 / 저점수 5건
-     (2026-09-09), 매장별 325·305·609자, 저점수 1건당 97~162자. 낡았으면 갱신 대상
+   - 실측 수치가 지금도 유효한지. 현재 기준: 전체 `_res` JSON 1,216자 / 저점수 4건
+     (2026-09-23; 수정 후 `warn` 필드 포함 1,250자), 매장별 585·409·218자, 저점수 1건당
+     97~239자(장문 리뷰 239자), 요약 한 줄 102자(수정 후 111자). 낡았으면 갱신 대상
    - Step 간 값 인계(`apiTotal`·`ok`·`authExpired`·`failedPages`)가 끊기는 지점
-   - **API 필터 기준과 엑셀 `날짜` 열이 같은 필드인지.** 1회차 실측: API 는
-     `createdAt`(리뷰 작성일)로 거르고 엑셀 열은 `orderedAt`(주문일)이다. 이 차이
-     때문에 생긴 결함 1 을 수정 회차에서 고쳤다. `createdAt` 최소값이 `startDate` 와
-     같은지로 필터 기준이 그대로인지 본다
+   - **API 필터 기준과 엑셀 `날짜` 열이 같은 필드인지 — 둘 다 `createdAt`(리뷰 작성일)이어야 한다.**
+     1회차엔 열이 `orderedAt`(주문일)이라 달랐고(그 차이로 생긴 결함 1 을 9/9 에 고침), 2026-09-23 에
+     열을 `createdAt` 으로 바꿨다(`pick(r, 'createdAt', 'reviewedAt', 'orderedAt', 'orderDate')`).
+     `createdAt` 최소값이 `startDate` 와 같은지로 필터 기준이 그대로인지, 저장 스크립트가 kept 행의
+     날짜를 이번 값으로 덮어쓰는지(`date_updated`·`date_unparsed`)를 본다
 
 ■ B. API 응답 스키마가 현재와 맞는지  ※ 실행으로만 판정 가능
    - `pick()` 후보들이 실제 응답에 존재하는지:
      `total`/`totalCount`/`totalElements` · `content`/`reviews`/`items`/`list` ·
      `rating`/`score`/`starCount` · `comment`/`reviewContent`/`content`/`text` ·
-     `orderedAt`/`orderDate`/`createdAt`/`reviewedAt` ·
+     `createdAt`/`reviewedAt`/`orderedAt`/`orderDate`(이 순서 — 리뷰 작성일 우선) ·
      `abbrOrderId`/`orderId`/`shortOrderId`/`orderNo` ·
      `orderInfo`/`items`/`menuInfo`/`orderItems`
    - **실제 응답의 최상위 키 목록을 그대로 보고하고, 직전 기준선의 목록과 대조해라.**
@@ -172,9 +215,10 @@ md5sum coupang-review-skill/SKILL.md "<Base directory>/SKILL.md"
      스킬이 `API 오류 <code>: <message>` 로 보고하는지. 존재하지 않는 storeId(예: 1)로
      한 번 돌려 확인한다(실측 기준: `10001 상점 정보를 찾을 수 없습니다.`). 이건 WAF 와
      무관해서 매 회차 해도 된다.
-   - `statusType=EXPOSE` 가 여전히 유효한지. 값이 틀리면 `apiTotal=0` 이 아니라
-     `API 오류 10007` 로 나타난다(1회차 실측). 3매장 모두 `apiTotal=0` 이면 날짜
-     파라미터 쪽을 의심한다.
+   - `statusType=EXPOSE` 가 여전히 유효한지. 유효값은 UI 요청으로 확인된 3개 —
+     `EXPOSE`(노출) / `BLIND`(차단) / `SUSPEND`(게시 중단)(2026-09-23 실측). 값이 틀리면
+     `apiTotal=0` 이 아니라 `API 오류 10007` 로 나타난다(1회차 실측, 틀린 값 자체는 WAF
+     규칙상 미실측). 3매장 모두 `apiTotal=0` 이면 날짜 파라미터 쪽을 의심한다.
    - `size=5` 외의 값이 403 인지는 **변경 의심 시에만** 실측한다(기준선에 2026-09-09
      `size=10 → 403` 이 기록돼 있다). 평소엔 WAF 를 건드리지 마라 — 아래 판정 기준의
      "WAF 는 건드리지 마라" 와 같은 뜻이다.
@@ -184,23 +228,30 @@ md5sum coupang-review-skill/SKILL.md "<Base directory>/SKILL.md"
    - `apiTotal === null` 일 때 `MAX_PAGES=200` 상한에 걸리면 어떻게 되는지.
      상한에 걸린 것과 정상 종료를 구분하는 장치가 있는지
    - `failedPages` 가 있는데도 저장 단계로 넘어가는 경로가 있는지
-   - `ratingFail` 이 전건일 때만 실패로 잡는데, 절반이 실패해도 통과하는 게 맞는지
-     ※ 판단이 갈리면 결함이 아니라 개선안으로
+   - `ratingFail` 10% 임계·정확 일치 판정(`collected < apiTotal` → 실패)·orderReviewId 중복
+     제거가 살아 있는지(2026-09-23 채택). 98% 규칙이 되살아났으면 결함
    - `orderNo` 보조키(`NOKEY_날짜_메뉴`)가 회차마다 달라져 중복 행을 만들 수 있는지
    - 결과 읽기에서 잘림이 일어났는데 눈치채지 못하는 경로
+   - **도구가 결과를 차단·절단하는 경로**: 반환 JSON 에 쿼리 파라미터 2개 이상(`&`)인 URL 이
+     들어가면 `[BLOCKED: Cookie/query string data]`(1개는 통과하지만 규칙에 기대지 말 것),
+     정확히 1,000자를 넘으면 끝에 `[TRUNCATED]`. 판정값이 이 경로에 걸려 안 보이는 곳이 있는지
+     (2026-09-23 결함 2 가 이 유형 — Step 1 의 `location.href`)
+     ※ 판단이 갈리면 결함이 아니라 개선안으로
 
 ■ D. 검증이 비어 있는 구간  ※ 결과는 전부 개선안으로 분류
-   - `collected` 와 `apiTotal` 이 정확히 같은지 검증하는 장치(98% 기준만 있다)
-   - 저장 후 엑셀을 다시 열어 행수·형식을 확인하는 단계가 없다
+   - 정확 일치 판정·재열기 검증(`verified`)·Step 0 자동 백업은 2026-09-23 까지 전부 들어갔다 —
+     살아 있는지는 [되돌리면 안 되는 것] 표로 본다
+   - `verified: false` 경로(재열기 불일치)는 조건을 만들지 못해 미실측 — 만들 수 있으면 실측
    - 3개 매장 결과를 합칠 때 `storeName` 오타를 잡는 장치가 없다
-   - 백업 자동화(스냅샷 방식이라 실행 전 백업이 사실상 필수인데 절차에 없다)
-   - 폴링 40회 상한에 걸렸을 때의 처리
+   - 폴링 14회 상한(30초 × 14 ≈ 7분)에 걸렸을 때의 처리
+   - `apiTotal === null` 경로에서 `MAX_PAGES` 도달·페이지 실패의 `reason` 구분(이월 개선안)
+   - 별점·리뷰내용이 수정된 리뷰의 kept 행 갱신(이월 개선안, API `modifiedAt` 존재)
 
 ■ E. 자동화·구조 개선 후보  ※ 결과는 전부 개선안으로 분류
    - 배민 스킬과 공유 가능한 부분(엑셀 저장 로직·날짜 정규화·`ok` 판정)
    - 매장 정보를 문서 본문이 아니라 별도 설정으로 뺄지
-   - `collected === apiTotal` 정확 일치를 보고에 올릴지(1회차엔 3매장 모두 정확 일치.
-     쿠팡 API 엔 배민의 `blocked` 같은 제외 집계가 없어 α 는 0 이어야 한다)
+   - (2026-09-23 채택 완료) `collected === apiTotal` 정확 일치는 이제 `ok` 판정에 들어갔다.
+     쿠팡 API 엔 배민의 `blocked` 같은 제외 집계가 없어 α 는 0 — 초과는 `warn` 으로만 남는다
 
 [판정 기준]
 
@@ -366,6 +417,15 @@ git clone https://github.com/LeeKwanBeom/coupang-review-skill
 
 ## 개선안 (최대 5)
 | # | 내용 | 이유 | 우선순위 |
+
+## 속도 기준선 (상시)
+| 매장 | apiTotal | collected | ratingFail | 저점수 | 페이지 수 | 페이지당 평균 ms(최소/최대) | TTFB 평균 | 매장 소요(초) |
+전체 항목: 수집 시작→완료(`_log`), 폴링 횟수·각 시각, 완료→감지 지연, 결과 읽기 호출 수,
+벽시계(navigate→결과 읽기 끝), 도구 호출 수. 직전 회차와 같은 열로 전/후를 나란히.
+
+## 속도 개선안 (속도 목표 회차에만, 최대 5)
+| # | 후보 | (a) 현재 코드 원문 | (b) 실측 | (c) 예상 절감 | (d) 정확성 리스크·검증 방법 | 판정 |
+합격 기준: 같은 매장·같은 세션 A/B 각 1회, orderReviewId 집합 동일 + apiTotal 동일 + 403·오류 0.
 
 ## 실행 실측 기록
 (이번 회차에 실제로 돌린 결과. 매장별 apiTotal·collected·ratingFail·페이지 수·
