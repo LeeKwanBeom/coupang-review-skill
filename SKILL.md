@@ -39,9 +39,9 @@ URL: `https://store.coupangeats.com/merchant/management/reviews/<storeId>`
 `device_bash`로 폴더·파이썬·잠금파일을 확인한다. 세 검사는 **각각 따로** 출력한다 — 예전의 `A && B && C && echo LOCKED || echo UNLOCKED` 한 줄은 폴더나 openpyxl이 없어도 마지막 `|| echo UNLOCKED`가 찍혀 환경 실패가 통과로 보였고, 이어지는 백업 블록의 `mkdir -p`가 마운트되지 않은 로컬 경로에 폴더를 만들어 Step 3가 사용자에게 보이지 않는 파일에 "저장 완료"를 보고했다(2026-09-23 재현). 되돌리지 말 것.
 
 ```bash
-[ -d "$HOME/mnt/claude" ] && echo FOLDER_OK || echo NO_FOLDER
+[ -d "$HOME/mnt/review" ] && echo FOLDER_OK || echo NO_FOLDER
 python3 -c "import openpyxl" 2>/dev/null && echo OPENPYXL_OK || echo NO_OPENPYXL
-[ -e "$HOME/mnt/claude/~\$쿠팡_저점수리뷰.xlsx" ] && echo LOCKED || echo UNLOCKED
+[ -e "$HOME/mnt/review/~\$쿠팡_저점수리뷰.xlsx" ] && echo LOCKED || echo UNLOCKED
 ```
 
 - 세 줄이 `FOLDER_OK` · `OPENPYXL_OK` · `UNLOCKED` 이어야 정상이다. 하나라도 빠지면 아래를 따른다.
@@ -49,12 +49,12 @@ python3 -c "import openpyxl" 2>/dev/null && echo OPENPYXL_OK || echo NO_OPENPYXL
 - `NO_OPENPYXL` → 사용자 PC에 openpyxl이 없다. `pip install openpyxl`을 시도하고 실패하면 Step 3를 건너뛰고 결과를 채팅 표로만 출력한다.
 - `LOCKED` → 엑셀을 닫아달라고 요청하고 재확인한다.
 
-엑셀 경로는 `$HOME/mnt/claude/쿠팡_저점수리뷰.xlsx` 이다.
+엑셀 경로는 `$HOME/mnt/review/쿠팡_저점수리뷰.xlsx` 이다.
 
 세 줄이 모두 정상(`FOLDER_OK` · `OPENPYXL_OK` · `UNLOCKED`)일 때만 **실행 전 백업**을 사용자 폴더 안에 남긴다. 이 스킬은 스냅샷 동기화라 Step 3가 기존 행을 지우므로 백업이 유일한 되돌리기 수단이다. `$HOME/skillwork`나 `$HOME` 아래는 세션별 홈이라 세션이 끝나면 접근할 수 없으니(2026-09-09 실측) 거기에 두지 말 것. 아래 블록은 폴더가 없으면 `mkdir -p`를 하지 않고 `NO_FOLDER`를 다시 찍는다.
 
 ```bash
-if [ ! -d "$HOME/mnt/claude" ]; then echo "NO_FOLDER — 백업 건너뜀 (Step 3도 실행하지 않는다)"; else mkdir -p "$HOME/mnt/claude/backup" && if [ -f "$HOME/mnt/claude/쿠팡_저점수리뷰.xlsx" ]; then cp "$HOME/mnt/claude/쿠팡_저점수리뷰.xlsx" "$HOME/mnt/claude/backup/쿠팡_저점수리뷰_$(date +%Y%m%d_%H%M%S).xlsx" && echo "백업 완료: $(ls -t $HOME/mnt/claude/backup/ | head -1)" || echo "백업 실패 — 중단하고 사용자에게 알린다"; else echo "백업 대상 없음(첫 실행)"; fi; fi
+if [ ! -d "$HOME/mnt/review" ]; then echo "NO_FOLDER — 백업 건너뜀 (Step 3도 실행하지 않는다)"; else mkdir -p "$HOME/mnt/review/backup" && if [ -f "$HOME/mnt/review/쿠팡_저점수리뷰.xlsx" ]; then cp "$HOME/mnt/review/쿠팡_저점수리뷰.xlsx" "$HOME/mnt/review/backup/쿠팡_저점수리뷰_$(date +%Y%m%d_%H%M%S).xlsx" && echo "백업 완료: $(ls -t $HOME/mnt/review/backup/ | head -1)" || echo "백업 실패 — 중단하고 사용자에게 알린다"; else echo "백업 대상 없음(첫 실행)"; fi; fi
 ```
 
 백업은 `backup/` 폴더에 회차마다 쌓인다. 정리는 사용자 몫이며 스킬이 지우지 않는다.
@@ -373,7 +373,7 @@ ENDJSON
 엑셀은 "최근 3개월 현황"이며(2026-09-23 변경 — 그전엔 1개월), 과거 리뷰가 지워지는 것은 의도된 동작이다. 1개월→3개월로 넓힌 뒤 **첫 실행**에서는 31~90일 전 저점수가 한꺼번에 "신규"로 들어온다 — 예상된 1회성 동작이다.
 
 ```bash
-python3 - "$HOME/skillwork/coupang.json" "$HOME/mnt/claude/쿠팡_저점수리뷰.xlsx" << 'ENDPY'
+python3 - "$HOME/skillwork/coupang.json" "$HOME/mnt/review/쿠팡_저점수리뷰.xlsx" << 'ENDPY'
 import json, sys, re, os
 from datetime import date
 import openpyxl
