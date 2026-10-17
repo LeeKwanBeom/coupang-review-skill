@@ -19,6 +19,7 @@ URL: `https://store.coupangeats.com/merchant/management/reviews/<storeId>`
 - **API를 쓰는 이유**: `/api/v1/merchant/reviews/search`는 포털과 **same-origin**이라 페이지 컨텍스트에서 그대로 호출된다. UI 조작·스크롤이 전혀 필요 없다. (배민은 API가 다른 오리진이라 브라우저 확장 스크립트에서 전부 차단된다 — 두 스킬의 구조가 다른 이유다.)
 - **`size=5` 고정**: 다른 값을 넣으면 WAF가 403을 돌려준다. 페이지 수가 늘더라도 이 값을 바꾸지 말 것.
 - **매장은 순차, 페이지는 page 1 단독 뒤 동시 2개(`CONC = 2`, 2026-09-23 사용자 승인으로 채택)**: 2026-06-22에 매장×페이지를 **전부 동시에** 부르고(`Promise.all`) `total`을 그 병렬 응답에서 읽었을 때 API가 잘못된 `total`을 돌려준 사례가 있었다(곱도리 45, 실제 261). 지금은 `total`을 **page 1 단독 응답에서만** 읽고, 2페이지부터 동시 2개로 받는다(2026-09-23 실측 참 제육 43페이지: 모든 페이지 `total` 43/43 일치·orderReviewId 집합 동일·소요 −54%). **동시 3 이상은 실측이 없다 — 올리지 말 것.** 매장 사이는 500ms 간격 순차 그대로다.
+- **API 오류 봉투는 `code` 5xxxx만 다시 부른다(2026-10-17 도입)**: 이 API는 오류를 HTTP 200 + `code`≠`SUCCESS`로 돌려준다. `1xxxx`(10001 없는 매장 · 10007 입력값 오류)는 다시 불러도 같은 답이라 즉시 실패다. `50001 외부 API 호출을 실패하였습니다.`는 서버 쪽 일시 오류다 — 2026-10-17 하루에 다섯 번, 모두 매장의 6개월 조회를 시작한 직후의 첫 요청들에서 났다(김치찜: 기간 변경 리허설 p1 · `/q-review-all` 실행 p1은 50001 실측, 재수집 p3은 HTTP 200·418바이트·재시도 흔적 없음이라 같은 봉투로 추정 — 그 응답 1,156ms는 같은 회차 정상 응답 146건(중앙값 466ms·최대 1,029ms)보다 느렸다 / 곱도리: 이 재시도를 넣은 회차의 리허설 p6·p7 — 1초 뒤 다시 불러 둘 다 정상). 곧바로 다시 부르면 매번 정상이었다. 그래서 5xxxx면 같은 요청을 1초·3초 뒤 최대 2번 더 부르고, 매장 하나당 6번까지만 쓴다(서버가 계속 실패해도 매장당 지연이 수 초로 묶인다). 다시 부르는 것은 그 페이지를 맡은 워커 안에서 차례로라 동시 요청 수(`CONC = 2`)와 "`total`은 page 1 단독 응답에서만" 규칙은 그대로다. 재시도 끝에 받으면 `ok`는 그대로이고 `warn`에 `서버 일시 오류 재시도 N회`가 남는다. 재시도해도 실패하면 종전처럼 그 매장만 `ok:false`다(그 요청을 다시 불렀으면 사유 끝에 `(재시도 N회 뒤)` — N은 그 요청에서 다시 부른 수라, 매장 총량을 먼저 다 쓴 뒤 실패한 요청에는 붙지 않거나 작게 나온다. 매장 전체 재시도 수는 `warn`의 `서버 일시 오류 재시도 N회`).
 - **`javascript_tool` 호출은 45초에서 CDP 타임아웃**이 난다. 수집은 백그라운드로 돌리고 폴링으로 확인한다.
 - **`javascript_tool` 반환값은 1,000자에서 잘린다**(2026-09-05 실측, 2026-09-09·2026-09-23 재확인 — 정확히 1,000자). 예외는 없고 끝에 `[TRUNCATED]` 표식과 함께 끊기므로 결과는 처음부터 매장 단위로 나눠 읽는다(아래 "결과 읽기"). 또 반환값에 **쿼리 파라미터가 2개 이상(`&`)인 URL**이 들어가면 결과 전체가 `[BLOCKED: Cookie/query string data]`로 바뀐다(2026-09-23 실측: 파라미터 1개는 통과, 2개부터 차단) — 반환 JSON에 `location.href`를 넣지 않는다.
 - **엑셀 `날짜` 열은 리뷰 작성일(`createdAt`)**: API 필터 `startDateTime`과 같은 기준이다(2026-09-23 변경 — 그전엔 주문일 `orderedAt`이라 둘이 달랐다). 배민 엑셀도 리뷰 작성일이다. 삭제 판정은 날짜가 아니라 주문번호 대조로만 한다.
@@ -123,10 +124,18 @@ window._res = null; window._err = null; window._log = [];
   const TIMEOUT = 15000;    // 서버 무응답 시 무기한 대기 방지
   const MAX_PAGES = 200;    // 총건수를 못 읽었을 때만 쓰는 안전 상한
   const CONC = 2;           // 2페이지부터의 동시 요청 수. 3 이상은 실측 없음 — 올리지 말 것 (설계 근거 참고)
+  // 서버 일시 오류 재시도(2026-10-17 도입 — 설계 근거 참고). code 가 5xxxx 인 API 오류 봉투만 다시 부른다(50001 실측).
+  // 1xxxx(10001·10007)는 재시도해도 같은 답이라 종전대로 즉시 실패다. 총량은 매장마다 따로 센다 — 서버가 계속 실패해도
+  // 매장당 지연이 수 초로 묶이고, 다 쓰면 그 뒤로는 종전처럼 한 번에 실패로 올린다.
+  const API_RETRY = /^5\d{4}$/;           // 재시도할 code. 50001 만 실측 — 나머지 5xxxx 는 같은 계열(서버 쪽)로 추정
+  const API_RETRY_WAIT = [1000, 3000];    // 재시도 전 대기(ms). 요청 하나당 최대 2번 더
+  const API_RETRY_BUDGET = 6;             // 매장 하나당 재시도 총량
+  const apiRetryLeft = {};                // storeId → 남은 재시도 수. one() 시작에서 채운다
 
   async function page(storeId, p) {
     const url = `${API}?storeId=${storeId}&page=${p}&statusType=EXPOSE&startDateTime=${startDate}&exclusiveEndDateTime=${endDate}&size=5`;
-    for (let a = 1; a <= 2; a++) {
+    let net = 0, api = 0;   // net: 네트워크·HTTP 오류로 실패한 시도 수(2번이면 실패), api: 서버 일시 오류로 다시 부른 수
+    for (;;) {
       const ac = new AbortController(); const t = setTimeout(() => ac.abort(), TIMEOUT);
       try {
         const r = await fetch(url, { credentials: 'same-origin', headers: { Accept: 'application/json' }, signal: ac.signal });
@@ -136,14 +145,24 @@ window._res = null; window._err = null; window._log = [];
         if (!r.ok) throw new Error('HTTP ' + r.status);
         const j = await r.json();
         // 이 API는 오류를 HTTP 200 + code≠SUCCESS + error.message 로 돌려준다(2026-09-09 실측: 없는 storeId → 10001,
-        // statusType 누락 → 10007). 재시도해도 같은 답이므로 즉시 실패로 올린다. code 필드가 없는 응답은 종전대로 다룬다.
-        if (j && typeof j === 'object' && 'code' in j && j.code !== 'SUCCESS')
-          return { ok: false, apiError: true, error: `API 오류 ${j.code}: ${j?.error?.message || '(메시지 없음)'}` };
+        // statusType 누락 → 10007 — 재시도해도 같은 답이므로 즉시 실패로 올린다). 5xxxx 는 서버 쪽 일시 오류라
+        // (2026-10-17 실측: 50001 외부 API 호출을 실패하였습니다.) 매장 총량이 남아 있으면 기다렸다 같은 요청을 다시 부른다.
+        // 다시 부르는 것은 이 워커 안에서 차례로라 동시 요청 수는 CONC 그대로다. code 필드가 없는 응답은 종전대로 다룬다.
+        if (j && typeof j === 'object' && 'code' in j && j.code !== 'SUCCESS') {
+          const msg = `API 오류 ${j.code}: ${j?.error?.message || '(메시지 없음)'}`;
+          if (API_RETRY.test(String(j.code).trim()) && api < API_RETRY_WAIT.length && apiRetryLeft[storeId] > 0) {
+            apiRetryLeft[storeId]--;
+            LOG(`[${storeId}] p${p} ${msg} → ${API_RETRY_WAIT[api]}ms 뒤 다시 부름`);
+            await new Promise(s => setTimeout(s, API_RETRY_WAIT[api++]));
+            continue;
+          }
+          return { ok: false, apiError: true, error: msg + (api ? ` (재시도 ${api}회 뒤)` : '') };
+        }
         return { ok: true, data: j?.data ?? j?.result ?? j };
       } catch (e) {
         clearTimeout(t);
         const msg = e.name === 'AbortError' ? `TIMEOUT(${TIMEOUT}ms)` : e.message;
-        if (a === 2) return { ok: false, error: msg };
+        if (++net >= 2) return { ok: false, error: msg };
         await new Promise(s => setTimeout(s, 500));
       }
     }
@@ -153,6 +172,7 @@ window._res = null; window._err = null; window._log = [];
 
   async function one(store) {
     LOG(`[${store.name}] 시작`);
+    apiRetryLeft[store.id] = API_RETRY_BUDGET;   // 서버 일시 오류 재시도 총량은 매장마다 새로
     // 기본값은 실패다. ok는 아래 검사를 전부 통과해야만 true가 된다.
     const fail = (reason, extra) => {
       LOG(`[${store.name}] 확인필요 — ${reason}`);
@@ -175,6 +195,7 @@ window._res = null; window._err = null; window._log = [];
 
     const all = [...content];   // page 1 응답 재사용 (중복 fetch 제거)
     const failedPages = [];
+    let failErr = '';   // 처음 실패한 페이지의 오류 문구 — reason 에 붙인다(2026-10-17: "페이지 실패 p3" 만으로는 원인을 몰랐다)
     let authExpired = false;
 
     if (apiTotal === null) {
@@ -182,7 +203,7 @@ window._res = null; window._err = null; window._log = [];
       // 수집 자체는 끝까지 해서 사용자가 눈으로 볼 저점수를 놓치지 않는다.
       for (let p = 2; p <= MAX_PAGES; p++) {
         const r = await page(store.id, p);
-        if (!r.ok) { failedPages.push(p); if (r.fatal) authExpired = true; break; }
+        if (!r.ok) { failedPages.push(p); failErr = failErr || r.error || ''; if (r.fatal) authExpired = true; break; }
         const c = contentOf(r.data) || [];
         if (!c.length) break;
         all.push(...c);
@@ -207,7 +228,7 @@ window._res = null; window._err = null; window._log = [];
       for (let p = 2; p <= pages; p++) {
         const r = results[p];
         if (r && r.ok) all.push(...(contentOf(r.data) || []));
-        else failedPages.push(p);   // 실패했거나(401 뒤) 받지 못한 페이지
+        else { failedPages.push(p); failErr = failErr || r?.error || ''; }   // 실패했거나(401 뒤) 받지 못한 페이지
       }
     }
     // 수집 도중 리뷰가 추가·삭제되면 페이지가 한 칸씩 밀려 같은 리뷰가 두 페이지에 걸치거나 한 건이 빠진다(2026-09-23 실측).
@@ -256,12 +277,14 @@ window._res = null; window._err = null; window._log = [];
     let ok = true, reason = '', warn = '';
     if (authExpired)                                  { ok = false; reason = '인증만료(401) — 수집 도중 세션 종료'; }
     else if (apiTotal === null)                       { ok = false; reason = '총건수 확인 필요 — total 계열 필드를 못 읽음'; }
-    else if (failedPages.length)                      { ok = false; reason = `페이지 실패 p${failedPages.join(',p')}`; }
+    else if (failedPages.length)                      { ok = false; reason = `페이지 실패 p${failedPages.join(',p')}${failErr ? ' — ' + failErr : ''}`; }
     else if (collected < apiTotal)                    { ok = false; reason = `누락 의심 — 수집 ${collected} < 전체 ${apiTotal}`; }
     else if (collected > 0 && ratingFail === collected)     { ok = false; reason = '별점 필드 확인 필요 — 전건 파싱 실패'; }
     else if (collected > 0 && ratingFail > collected * 0.1) { ok = false; reason = `별점 파싱 실패 ${ratingFail}/${collected} — 10% 초과`; }
     if (ok && collected > apiTotal) warn = `수집 ${collected} > 전체 ${apiTotal} — 수집 중 신규 등록 추정`;
     if (dup) warn += (warn ? '; ' : '') + `중복 제거 ${dup}건`;
+    const retried = API_RETRY_BUDGET - apiRetryLeft[store.id];   // 재시도 끝에 받았으면 ok 그대로 — 몇 번 다시 불렀는지만 남긴다
+    if (retried) warn += (warn ? '; ' : '') + `서버 일시 오류 재시도 ${retried}회`;
     if (ok) LOG(`[${store.name}] 정상 완료 ${collected}건 (저점수 ${low.length})${warn ? ' ⚠ ' + warn : ''}`);
     else LOG(`[${store.name}] 확인필요 — ${reason}`);
 
@@ -336,7 +359,7 @@ JSON.stringify({s: window._res[0].storeName, i: 0, r: window._res[0].lowScore.sl
 - `authExpired === true`가 하나라도 있으면 → 수집 도중 세션이 끊긴 것이다. 최종 보고에 반드시 올리고 이렇게 안내한다:
   > ⚠️ 수집 도중 로그인이 풀렸습니다([매장명]). 크롬에서 다시 로그인한 뒤 '완료했어요'라고 알려주시면 해당 매장만 다시 수집합니다.
 - `ratingFail > 0`인데 `ok === true` → 일부 리뷰(10% 이하)만 별점을 못 읽은 것이다. 진행하되 건수를 최종 보고에 올린다. 그 리뷰는 `[별점확인필요]`가 붙어 엑셀에 남는다. 10%를 넘으면 `ok === false`(`별점 파싱 실패 N/M — 10% 초과`)로 나온다.
-- `warn`이 비어 있지 않은데 `ok === true` → 정상 저장 대상이다. `수집 N > 전체 M — 수집 중 신규 등록 추정`(수집 도중 새 리뷰가 달려 페이지가 밀린 것, 그 리뷰는 다음 실행에서 들어온다)과 `중복 제거 N건`이 여기 온다. 최종 보고의 상태 열에 그대로 적는다.
+- `warn`이 비어 있지 않은데 `ok === true` → 정상 저장 대상이다. `수집 N > 전체 M — 수집 중 신규 등록 추정`(수집 도중 새 리뷰가 달려 페이지가 밀린 것, 그 리뷰는 다음 실행에서 들어온다)과 `중복 제거 N건`, `서버 일시 오류 재시도 N회`(API가 50001 같은 5xxxx 오류를 돌려줘 같은 요청을 다시 불러 받은 것 — 데이터는 온전하다)가 여기 온다. 최종 보고의 상태 열에 그대로 적는다.
 - **3개 매장 모두 `apiTotal === 0`** → 리뷰가 정말 없을 수도 있지만 파라미터가 안 먹었을 가능성이 더 크다. 이상 신호로 보고 사용자에게 "쿠팡이츠 화면에 최근 6개월 리뷰가 보이는지" 확인을 요청한 뒤 저장한다.
 - 한 매장만 `apiTotal === 0`이고 `ok === true` → 정상으로 본다(그 매장은 실제로 리뷰가 없는 것).
 
@@ -544,7 +567,7 @@ tabs_close_mcp(tabId=<탭ID>)
 
 - `전체(API)` 열은 `apiTotal`을, `수집` 열은 `collected`를 그대로 쓴다. 둘을 합쳐 쓰지 않는다 — 두 값이 벌어지는 것 자체가 신호다. `apiTotal`이 `null`이면 `확인필요`라고 적는다.
 - `ok === false`인 매장은 상태 열에 `⚠️ 확인필요: <reason>`을 쓰고, **그 매장은 엑셀에 반영되지 않았음을 한 줄로 덧붙인다**("기존 행은 그대로 두었습니다").
-- `warn`이 있으면 상태 열에 `정상 — <warn>`으로 **그대로** 적는다(예: `정상 — 수집 167 > 전체 166 — 수집 중 신규 등록 추정`, `정상 — 중복 제거 1건`). 줄이지 않는다.
+- `warn`이 있으면 상태 열에 `정상 — <warn>`으로 **그대로** 적는다(예: `정상 — 수집 167 > 전체 166 — 수집 중 신규 등록 추정`, `정상 — 중복 제거 1건`, `정상 — 서버 일시 오류 재시도 1회`). 줄이지 않는다.
 - 엑셀 줄에는 저장 결과의 `verified`(통과/실패 + `verify_msg`)와 `date_updated`를 함께 적는다.
 - `ratingFail > 0`이면 표 아래에 `별점을 읽지 못한 리뷰 N건 — [별점확인필요] 표시로 저장됨`을 덧붙인다.
 - `authExpired`가 있으면 재로그인 안내를 맨 위에 올린다.
@@ -568,8 +591,8 @@ tabs_close_mcp(tabId=<탭ID>)
 | `STATUS:403` / 수집 중 403 | `size` 값을 바꿨을 가능성 (WAF 제약) | `size=5` 고정 확인. 403은 중단 조건이 아니다 |
 | `STATUS:401` (Step 1) | 시작 시점 인증 만료 | 로그인 요청 후 Step 1 재시작 |
 | `인증만료(401) — 수집 도중 세션 종료` | Step 2 진행 중 세션 만료 | 그 매장은 실패 처리되어 엑셀이 보존된다. 재로그인 후 재실행 |
-| `API 오류 <code>: <message>` (HTTP 200이지만 `code`≠`SUCCESS`) | 서버가 거절한 요청. 실측: 없는 storeId → `10001 상점 정보를 찾을 수 없습니다`, `statusType` 누락 → `10007 입력 된 정보가 유효하지 않습니다`(틀린 값도 같을 것으로 추정, 미실측) | `error.message`를 그대로 읽는다. 10001이면 매장 정보 표의 storeId, 10007이면 `statusType`·날짜 파라미터를 확인 |
-| `API 오류 50001: 외부 API 호출을 실패하였습니다.` | 서버 쪽 일시 오류. 2026-10-17 실측: 페이지 로드 직후 첫 6개월 요청(김치찜)에서 1회 나고, 곧바로 같은 요청 4회와 이어서 돌린 6개월 전체 수집 717페이지에서는 0회 | 그 매장은 `ok:false`라 엑셀 행은 보존된다 — 재실행. 이 스킬은 API 오류 봉투를 재시도하지 않는다(10001·10007은 재시도해도 같은 답). 50001이 자주 나면 그때 이 코드만 재시도 대상에 넣을지 정한다 |
+| `API 오류 <code>: <message>` (HTTP 200이지만 `code`≠`SUCCESS`) | 서버가 거절한 요청. 실측: 없는 storeId → `10001 상점 정보를 찾을 수 없습니다`, `statusType` 누락 → `10007 입력 된 정보가 유효하지 않습니다`(틀린 값도 같을 것으로 추정, 미실측) | `error.message`를 그대로 읽는다. 10001이면 매장 정보 표의 storeId, 10007이면 `statusType`·날짜 파라미터를 확인. `1xxxx`는 재시도하지 않는다(같은 답). `5xxxx`는 아래 행 |
+| `API 오류 50001: 외부 API 호출을 실패하였습니다.` — 상태 열 `정상 — 서버 일시 오류 재시도 N회`, 또는 사유 끝 `(재시도 N회 뒤)`·`페이지 실패 pN — API 오류 50001: …` | 서버 쪽 일시 오류. 2026-10-17 실측: 매장의 6개월 조회를 시작한 직후의 첫 요청들에서 하루 다섯 번(김치찜 기간 변경 리허설 p1·실행 p1은 50001, 재수집 p3은 418바이트 봉투 — 같은 회차 최장 응답 1,156ms / 곱도리 재시도 리허설 p6·p7은 50001 → 1초 뒤 다시 불러 정상). 곧바로 다시 부른 요청은 전부 정상이었고, 그 밖의 페이지에서는 0회 | 5xxxx는 같은 요청을 1초·3초 뒤 최대 2번 더 부른다(매장당 6번까지 — 설계 근거 참고). `정상 — 재시도 N회`면 그대로 저장 대상이다. 재시도 뒤에도 실패해 `ok:false`면 엑셀 행은 보존된다 — 재실행. 재시도가 매 실행 나오거나 매장당 6번을 다 쓰면 서버 쪽 장애이니 시간을 두고 재실행 |
 | `응답 구조 불명: [...]` | (1) `code` 필드가 없는 응답으로 스키마가 바뀜 (2) `code` 검사를 지나쳤는데 `content` 계열 키가 없음 | 사유에 찍힌 키 목록을 본다. `data`·`error`·`code`가 보이면 API 오류 봉투가 그대로 온 것이니 위 행으로. 그 외에는 로그의 응답 키 목록으로 `pick()` 후보 추가 |
 | `apiTotal=0`인데 화면엔 리뷰가 보임 | 날짜 파라미터가 안 먹었거나 API 필터 기준이 바뀜 | 3개 매장 모두 0이면 특히 의심. `statusType` 파라미터가 빠진 경우는 0이 아니라 `API 오류 10007`(구버전이면 `응답 구조 불명: ["statusType"]`)로 나타난다(2026-09-09 실측) — 그 행을 볼 것 |
 | 특정 매장만 `ok:false` | 그 매장 API 실패 | 나머지 매장은 계속 진행. 그 매장 엑셀 행은 보존됨. 재실행으로 복구 |
