@@ -9,7 +9,8 @@
 해야 한다.** 한쪽만 고치면 다음 회차가 틀린 지시를 먼저 읽는다.
 채택 여부를 묻기 전에 고치지 마라.
 
-버전: v3.1 (2026-10-17 재시도 회차 — "되돌리면 안 되는 것" 표에 5xxxx 재시도 행, [의도된 동작]에
+버전: v3.2 (2026-10-20 50001 워밍업 회차 — "되돌리면 안 되는 것" 표에 Step 1 ↔ Step 2 날짜 식·`st`/`warm` 행)
+v3.1 (2026-10-17 재시도 회차 — "되돌리면 안 되는 것" 표에 5xxxx 재시도 행, [의도된 동작]에
 `서버 일시 오류 재시도 N회` 추가)
 v3 (2026-09-23 2회차 수정 회차 — 개정안 1~14 채택: 속도 기준선 표·전체 항목 상시화(A/B
 실험 절은 속도 목표 회차만), orderReviewId 집합 localStorage 보관, C 항목에 도구 차단·절단 경로
@@ -190,6 +191,7 @@ md5sum coupang-review-skill/SKILL.md "<Base directory>/SKILL.md"
 | 실패 매장도 배열에 남김 | 사람이 골라내면 저장 스크립트가 판단할 근거가 사라짐 | Step 3-1 |
 | `ws.delete_rows` | 셀을 None 으로 비우면 빈 행이 누적돼 파일이 계속 커짐 | Step 3-2 |
 | 반환 JSON 에 `location.href` 를 넣지 않음(`path: location.host + location.pathname` 만), `isLogin` 은 pathname 기준, `[BLOCKED:` 면 로그인 필요로 간주 | 쿼리 파라미터 2개 이상인 URL 이 들어가면 `[BLOCKED: Cookie/query string data]` 로 결과 전체가 막혀 상태 코드를 못 봄. 로그인 리다이렉트 URL 에 쿼리가 붙는다(2026-09-23). "무시하고 진행"으로 되돌리면 로그인 확인이 건너뛰어짐 | Step 1 |
+| Step 1 확인 요청 URL = Step 2 첫 요청(김치찜 p1) URL(2026-10-20 워밍업 겸용) — Step 1 의 날짜 식(`pad`·`fmt`·`today`·`monthsBack`·`startDate`·`endDate`, 로컬 시각·월말 클램핑)이 Step 2 의 같은 이름 줄과 같다. `st` 는 HTTP 상태만으로 정하고, 본문 `code` 는 200 일 때만 기록용 `warm`(영숫자 토큰, 못 읽으면 `NOJSON`)으로, 요청에 15초 `AbortController` | 기간·식을 Step 2 에서만 바꾸거나 UTC(`toISOString`)로 짜면 두 URL 이 어긋나 워밍업이 조용히 사라진다(아침 실행마다 하루 차이 — 수집 결과는 그대로라 아무도 모른다). `st` 를 본문 읽기에 엮으면 401 HTML 에서 `r.json()` 이 throw 해 `FETCH_ERROR` 가 되어 Step 1 의 로그인 중단이 빠진다(Step 2 가 401 로 `ok:false`). `warm` 에 서버 문구·URL 을 담으면 `[BLOCKED]` 가능, 시간 제한을 빼면 서버가 멈출 때 45초 CDP 타임아웃 | Step 1 · Step 2 머리 문장 · 설계 근거 |
 | 수집은 백그라운드 + 폴링(호출 안에서 완료까지 대기, 상한 30초·최대 14회) | 동기로 기다리면 45초 CDP 타임아웃에 걸림. 상한을 45초 가까이 올리면 같은 일이 남 | Step 2 · 완료 폴링 |
 | Step 0 세 검사 분리 출력(`FOLDER_OK`/`OPENPYXL_OK`/`UNLOCKED`) + 백업 블록의 폴더 가드 | `A && B && C && echo LOCKED \|\| echo UNLOCKED` 한 줄로 되돌리면 폴더·openpyxl 부재가 `UNLOCKED` 로 찍혀 통과하고, `mkdir -p` 가 마운트 안 된 로컬 경로를 만들어 Step 3 가 보이지 않는 파일에 "저장 완료"를 보고함(2026-09-23 재현) | Step 0 |
 | 정확 일치 판정(`collected < apiTotal` → `ok:false`, 초과·중복은 `warn`) + orderReviewId 중복 제거 + `ratingFail` 10% 임계 | 98% 규칙으로 되돌리면 페이지 밀림으로 생기는 ±1건 오차가 통과함(2026-09-23 실측) | Step 2 `one()` |

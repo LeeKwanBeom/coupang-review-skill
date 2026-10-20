@@ -19,7 +19,8 @@ URL: `https://store.coupangeats.com/merchant/management/reviews/<storeId>`
 - **API를 쓰는 이유**: `/api/v1/merchant/reviews/search`는 포털과 **same-origin**이라 페이지 컨텍스트에서 그대로 호출된다. UI 조작·스크롤이 전혀 필요 없다. (배민은 API가 다른 오리진이라 브라우저 확장 스크립트에서 전부 차단된다 — 두 스킬의 구조가 다른 이유다.)
 - **`size=5` 고정**: 다른 값을 넣으면 WAF가 403을 돌려준다. 페이지 수가 늘더라도 이 값을 바꾸지 말 것.
 - **매장은 순차, 페이지는 page 1 단독 뒤 동시 2개(`CONC = 2`, 2026-09-23 사용자 승인으로 채택)**: 2026-06-22에 매장×페이지를 **전부 동시에** 부르고(`Promise.all`) `total`을 그 병렬 응답에서 읽었을 때 API가 잘못된 `total`을 돌려준 사례가 있었다(곱도리 45, 실제 261). 지금은 `total`을 **page 1 단독 응답에서만** 읽고, 2페이지부터 동시 2개로 받는다(2026-09-23 실측 참 제육 43페이지: 모든 페이지 `total` 43/43 일치·orderReviewId 집합 동일·소요 −54%). **동시 3 이상은 실측이 없다 — 올리지 말 것.** 매장 사이는 500ms 간격 순차 그대로다.
-- **API 오류 봉투는 `code` 5xxxx만 다시 부른다(2026-10-17 도입)**: 이 API는 오류를 HTTP 200 + `code`≠`SUCCESS`로 돌려준다. `1xxxx`(10001 없는 매장 · 10007 입력값 오류)는 다시 불러도 같은 답이라 즉시 실패다. `50001 외부 API 호출을 실패하였습니다.`는 서버 쪽 일시 오류다 — 2026-10-17 하루에 다섯 번, 모두 매장의 6개월 조회를 시작한 직후의 첫 요청들에서 났다(김치찜: 기간 변경 리허설 p1 · `/q-review-all` 실행 p1은 50001 실측, 재수집 p3은 HTTP 200·418바이트·재시도 흔적 없음이라 같은 봉투로 추정 — 그 응답 1,156ms는 같은 회차 정상 응답 146건(중앙값 466ms·최대 1,029ms)보다 느렸다 / 곱도리: 이 재시도를 넣은 회차의 리허설 p6·p7 — 1초 뒤 다시 불러 둘 다 정상). 곧바로 다시 부르면 매번 정상이었다. 그래서 5xxxx면 같은 요청을 1초·3초 뒤 최대 2번 더 부르고, 매장 하나당 6번까지만 쓴다(서버가 계속 실패해도 매장당 지연이 수 초로 묶인다). 다시 부르는 것은 그 페이지를 맡은 워커 안에서 차례로라 동시 요청 수(`CONC = 2`)와 "`total`은 page 1 단독 응답에서만" 규칙은 그대로다. 재시도 끝에 받으면 `ok`는 그대로이고 `warn`에 `서버 일시 오류 재시도 N회`가 남는다. 재시도해도 실패하면 종전처럼 그 매장만 `ok:false`다(그 요청을 다시 불렀으면 사유 끝에 `(재시도 N회 뒤)` — N은 그 요청에서 다시 부른 수라, 매장 총량을 먼저 다 쓴 뒤 실패한 요청에는 붙지 않거나 작게 나온다. 매장 전체 재시도 수는 `warn`의 `서버 일시 오류 재시도 N회`).
+- **API 오류 봉투는 `code` 5xxxx만 다시 부른다(2026-10-17 도입)**: 이 API는 오류를 HTTP 200 + `code`≠`SUCCESS`로 돌려준다. `1xxxx`(10001 없는 매장 · 10007 입력값 오류)는 다시 불러도 같은 답이라 즉시 실패다. `50001 외부 API 호출을 실패하였습니다.`는 서버 쪽 일시 오류다 — 도입 무렵(2026-10-17 02:00~10:06) 다섯 번, 모두 매장의 6개월 조회를 시작한 뒤 몇 초 안의 앞쪽 페이지(p1~p7)에서 났다 — 매장의 첫 요청만은 아니다(김치찜: 기간 변경 사전 실측 p1 · `/q-review-all` 실행 p1은 50001 실측, 재수집 p3은 HTTP 200·418바이트·재시도 흔적 없음이라 같은 봉투로 추정 — 그 응답 1,156ms는 같은 회차 정상 응답 146건(중앙값 466ms·최대 1,029ms)보다 느렸다 / 곱도리: 이 재시도를 넣은 회차의 리허설 p6·p7 — 1초 뒤 다시 불러 둘 다 정상). 다시 부른 요청은 정상이었다(사전 실측 p1은 1.5초 간격으로 같은 요청 4번, 곱도리 p6·p7은 1초 뒤 — 김치찜 실행 p1·재수집 p3은 재시도 없는 옛 코드라 다시 부르지 않았다). 그래서 5xxxx면 같은 요청을 1초 뒤, 다시 3초 뒤(처음 실패로부터 4초) 최대 2번 더 부르고, 매장 하나당 6번까지만 쓴다(서버가 계속 실패해도 매장당 재시도 대기가 합쳐 최대 약 12초 — 요청 3개 × 4초 — 로 묶인다. 응답 시간은 따로). 도입 뒤 재시도 코드 아래의 50001은 2026-10-20까지 9번(위 곱도리 p6·p7 포함) 모두 회복됐지만, 한 번은 1초 뒤 재시도도 50001이라 3초 뒤 두 번째에 받았다(2026-10-17 10:55 김치찜 p1 — 요청당 한도를 다 씀). 다시 부르는 것은 그 페이지를 맡은 워커 안에서 차례로라 동시 요청 수(`CONC = 2`)와 "`total`은 page 1 단독 응답에서만" 규칙은 그대로다. 재시도 끝에 받으면 `ok`는 그대로이고 `warn`에 `서버 일시 오류 재시도 N회`가 남는다. 재시도해도 실패하면 종전처럼 그 매장만 `ok:false`다(그 요청을 다시 불렀으면 사유 끝에 `(재시도 N회 뒤)` — N은 그 요청에서 다시 부른 수라, 매장 총량을 먼저 다 쓴 뒤 실패한 요청에는 붙지 않거나 작게 나온다. 매장 전체 재시도 수는 `warn`의 `서버 일시 오류 재시도 N회`).
+- **Step 1 확인 요청은 Step 2 첫 요청(김치찜 p1)과 같은 URL이다(2026-10-20 — 서버 워밍업 겸용)**: 50001은 그 매장의 6개월 조회가 한동안(약 15분 이상) 없다가 조회를 시작한 뒤 0~4초 안에 몰리고(2026-10-17~10-20 시각을 아는 것 전부), 매장마다 크게 다르다(그런 콜드 시작에서 김치찜 7/8(추정 1 포함) · 곱도리 2/7 · 참 제육 0/8). 최근 조회 30초~8분 뒤의 수집에서는 0번이었다(3번). 그래서 Step 1의 로그인 확인 요청을 김치찜 p1과 문자열로 같은 URL(`statusType=EXPOSE` · 6개월 시작 · 내일 끝 · `size=5`)로 보내, 모델이 Step 2를 쓰는 약 30초(2026-10-17·10-19·10-20 실측 30~32초) 동안 서버가 데워지게 한다 — 김치찜 콜드 첫 요청의 50001을 버려도 되는 Step 1이 받는다. 요청 수는 그대로(+0)이고 Step 2 코드는 바꾸지 않았다. 설계 때 근거는 간접뿐이었고(이 꼴의 직접 사례 0), 도입 회차 리허설(2026-10-20 10:17)에서 처음 1번 맞았다(Step 1 `warm` 50001 → 46.6초 뒤 Step 2 재시도 0) — 효과는 병합 뒤 실사용 3회로 판정한다. 로그인 판정은 HTTP 상태(`st`)만으로 하고, 본문 `code`는 기록용 `warm`으로만 돌려준다(Step 1). 날짜 식은 Step 2와 같아야 한다(로컬 시각 · 월말 클램핑 — UTC `toISOString`으로 짜면 아침 실행마다 하루 어긋나 조용히 효과 0) — 기간을 바꾸면 Step 1·Step 2를 함께 고친다. 재시도는 그대로 둔다 — 워밍업이 못 받는 것(곱도리 등)은 재시도가 받는다.
 - **`javascript_tool` 호출은 45초에서 CDP 타임아웃**이 난다. 수집은 백그라운드로 돌리고 폴링으로 확인한다.
 - **`javascript_tool` 반환값은 1,000자에서 잘린다**(2026-09-05 실측, 2026-09-09·2026-09-23 재확인 — 정확히 1,000자). 예외는 없고 끝에 `[TRUNCATED]` 표식과 함께 끊기므로 결과는 처음부터 매장 단위로 나눠 읽는다(아래 "결과 읽기"). 또 반환값에 **쿼리 파라미터가 2개 이상(`&`)인 URL**이 들어가면 결과 전체가 `[BLOCKED: Cookie/query string data]`로 바뀐다(2026-09-23 실측: 파라미터 1개는 통과, 2개부터 차단) — 반환 JSON에 `location.href`를 넣지 않는다.
 - **엑셀 `날짜` 열은 리뷰 작성일(`createdAt`)**: API 필터 `startDateTime`과 같은 기준이다(2026-09-23 변경 — 그전엔 주문일 `orderedAt`이라 둘이 달랐다). 배민 엑셀도 리뷰 작성일이다. 삭제 판정은 날짜가 아니라 주문번호 대조로만 한다.
@@ -75,11 +76,33 @@ navigate(url=https://store.coupangeats.com/merchant/management/reviews/780573, t
 window.__API__ = '/api/v1/merchant/reviews/search';   // 엔드포인트 변경 시 이 줄만 고치면 Step 2도 함께 반영된다
 // 반환 JSON에 URL을 담지 않는다 — 쿼리 파라미터가 2개 이상(&)인 URL이 들어가면 브라우저 도구가 결과 전체를
 // [BLOCKED: Cookie/query string data]로 바꿔 실제 상태 코드(401 등)를 못 본다(2026-09-23 실측: 1개는 통과, 2개부터 차단).
-// 로그인 리다이렉트 URL(/merchant/login?redirectUrl=…)에도 쿼리가 붙으므로 host+pathname만 돌려준다. 상태 코드만 돌려준다.
-const st = await fetch(window.__API__ + '?storeId=780573&page=1&size=5',
-  { credentials: 'same-origin', headers: { Accept: 'application/json' } })
-  .then(r => 'STATUS:' + r.status).catch(e => 'FETCH_ERROR:' + e.message);
-JSON.stringify({ st, path: location.host + location.pathname, isLogin: /login|signin|auth|oauth|account|member/i.test(location.pathname),
+// 로그인 리다이렉트 URL(/merchant/login?redirectUrl=…)에도 쿼리가 붙으므로 host+pathname만 돌려준다. 상태 코드(+ 기록용 warm 토큰)만 돌려준다.
+// 확인 요청은 Step 2 첫 요청(김치찜 p1)과 문자열로 같은 URL이다 — 서버 워밍업 겸용(2026-10-20, 설계 근거 참고).
+// 아래 날짜 식(pad·fmt·today·monthsBack·startDate·endDate)은 Step 2의 같은 이름 줄과 같아야 한다(로컬 시각 · 월말 클램핑 — toISOString(UTC) 금지). 기간을 바꾸면 Step 2와 함께 고친다.
+const pad = n => String(n).padStart(2, '0');
+const fmt = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const today = new Date();
+const monthsBack = (d, m) => {
+  const i = d.getMonth() - m, y = d.getFullYear() + Math.floor(i / 12), mo = ((i % 12) + 12) % 12;
+  return new Date(y, mo, Math.min(d.getDate(), new Date(y, mo + 1, 0).getDate()));
+};
+const startDate = fmt(monthsBack(today, 6));
+const endDate = fmt(new Date(today.getTime() + 864e5));
+// st 는 HTTP 상태만으로 정한다 — 401 HTML 본문에서 r.json() 이 throw 해도 STATUS:401 이다. 본문 code 는 200 일 때만 따로 읽어
+// warm 에 담는다(기록용 — 영숫자 토큰만, 못 읽으면 고정 토큰 NOJSON. 오류 문구는 담지 않는다). 15초 넘으면 FETCH_ERROR.
+let warm = 'NOJSON';
+const ac = new AbortController(); const t = setTimeout(() => ac.abort(), 15000);
+const st = await fetch(`${window.__API__}?storeId=780573&page=1&statusType=EXPOSE&startDateTime=${startDate}&exclusiveEndDateTime=${endDate}&size=5`,
+  { credentials: 'same-origin', headers: { Accept: 'application/json' }, signal: ac.signal })
+  .then(async r => {
+    if (r.status === 200) {
+      try { const c = String((await r.json())?.code ?? ''); if (/^\w{1,20}$/.test(c)) warm = c; } catch (e) {}   // 못 읽으면 NOJSON 그대로
+    }
+    return 'STATUS:' + r.status;
+  })
+  .catch(e => 'FETCH_ERROR:' + (e.name === 'AbortError' ? 'TIMEOUT(15000ms)' : e.message))
+  .finally(() => clearTimeout(t));
+JSON.stringify({ st, warm, path: location.host + location.pathname, isLogin: /login|signin|auth|oauth|account|member/i.test(location.pathname),
   hasPw: !!document.querySelector('input[type=password]'), preview: document.body.innerText.substring(0, 150) })
 ```
 
@@ -90,13 +113,15 @@ JSON.stringify({ st, path: location.host + location.pathname, isLogin: /login|si
 
 `STATUS:403`은 WAF 제약일 수 있으니 중단하지 않고 Step 2로 진행한다. 결과가 `[BLOCKED:`로 시작하면 → 반환값에 파라미터 2개 이상인 URL이 들어간 것이다(정상 경로에서는 반환값에 URL이 없어 차단되지 않는다). **로그인 필요로 간주**하고 위 문구로 요청한다 — "무시하고 진행"하지 않는다(2026-09-23 결함 2).
 
+**`warm` 은 기록용이다 — 중단·재실행·사용자 경고에 쓰지 않는다.** 확인 요청이 Step 2 첫 요청(김치찜 p1)과 같은 6개월 조건이라 서버를 미리 데우는 몫도 하고(2026-10-20 — 설계 근거), `warm` 은 그 응답의 `code`(`SUCCESS` · `50001` 등 — 200이 아니거나 못 읽으면 `NOJSON`)다. `warm: "50001"` 은 콜드 서버의 일시 오류를 버려도 되는 이 요청이 대신 받은 것이라 자주 나온다 — 정상이니 멈추거나 다시 돌리지 말고 그대로 Step 2로 간다. 로그인 판정은 위 중단 조건(`st` 등)으로만 한다. Step 1을 마치면 따로 기다리지 않고 곧바로 Step 2로 간다 — Step 2 코드를 쓰는 약 30초가 그대로 워밍업 간격이다.
+
 > 이 확인은 **시작 시점 한 번뿐**이다. 수집 도중 세션이 풀리는 경우는 Step 2가 401을 직접 잡아 그 매장을 실패로 돌린다(아래). 로그아웃 상태 실측(2026-09-23): 매장 URL이 `store.coupangeats.com/merchant/login?redirectUrl=…`로 리다이렉트되어 `path` 는 `store.coupangeats.com/merchant/login`, `isLogin: true`, `hasPw: true`, `st: STATUS:401` 셋이 함께 성립한다.
 
 ---
 
 ## Step 2: 3개 매장 순차 수집
 
-날짜 범위는 오늘 기준 최근 6개월(2026-10-17 변경 — 2026-09-23부터 3개월, 그전엔 1개월). 월말 overflow는 해당 월 마지막 날로 클램핑한다(8/31 − 6개월 = 2/28, 윤년 2/29).
+날짜 범위는 오늘 기준 최근 6개월(2026-10-17 변경 — 2026-09-23부터 3개월, 그전엔 1개월). 월말 overflow는 해당 월 마지막 날로 클램핑한다(8/31 − 6개월 = 2/28, 윤년 2/29). 날짜 식은 Step 1 확인 요청과 같다 — 기간·식을 바꾸면 Step 1도 함께 고친다(두 URL이 문자열로 같아야 워밍업이 된다).
 
 ```javascript
 window._res = null; window._err = null; window._log = [];
@@ -590,9 +615,10 @@ tabs_close_mcp(tabId=<탭ID>)
 | Step 1 결과가 `[BLOCKED: Cookie/query string data]` | 반환값에 쿼리 파라미터 2개 이상인 URL이 들어감(로그인 리다이렉트 URL 등) | 로그인 필요로 간주하고 로그인 요청. 반환 JSON에 `location.href`를 넣지 말 것(`path`만). 2026-09-23 실측 |
 | `STATUS:403` / 수집 중 403 | `size` 값을 바꿨을 가능성 (WAF 제약) | `size=5` 고정 확인. 403은 중단 조건이 아니다 |
 | `STATUS:401` (Step 1) | 시작 시점 인증 만료 | 로그인 요청 후 Step 1 재시작 |
+| Step 1 결과의 `warm` 이 `50001` 등 `SUCCESS` 가 아님 | 확인 요청이 김치찜 p1 과 같은 조건이라 콜드 서버의 일시 오류를 대신 받은 것(2026-10-20 워밍업 겸용 — 설계 근거). `NOJSON` 은 200 이 아니었거나 본문을 못 읽은 것 | 정상. 기록용일 뿐 중단·재실행·경고하지 않고 그대로 Step 2 로 간다 — 로그인 판정은 `st` 로만 한다. Step 2 에서도 `API 오류 10007` 이 나면 아래 `API 오류 <code>` 행(날짜·`statusType` 파라미터)을 본다 |
 | `인증만료(401) — 수집 도중 세션 종료` | Step 2 진행 중 세션 만료 | 그 매장은 실패 처리되어 엑셀이 보존된다. 재로그인 후 재실행 |
 | `API 오류 <code>: <message>` (HTTP 200이지만 `code`≠`SUCCESS`) | 서버가 거절한 요청. 실측: 없는 storeId → `10001 상점 정보를 찾을 수 없습니다`, `statusType` 누락 → `10007 입력 된 정보가 유효하지 않습니다`(틀린 값도 같을 것으로 추정, 미실측) | `error.message`를 그대로 읽는다. 10001이면 매장 정보 표의 storeId, 10007이면 `statusType`·날짜 파라미터를 확인. `1xxxx`는 재시도하지 않는다(같은 답). `5xxxx`는 아래 행 |
-| `API 오류 50001: 외부 API 호출을 실패하였습니다.` — 상태 열 `정상 — 서버 일시 오류 재시도 N회`, 또는 사유 끝 `(재시도 N회 뒤)`·`페이지 실패 pN — API 오류 50001: …` | 서버 쪽 일시 오류. 2026-10-17 실측: 매장의 6개월 조회를 시작한 직후의 첫 요청들에서 하루 다섯 번(김치찜 기간 변경 리허설 p1·실행 p1은 50001, 재수집 p3은 418바이트 봉투 — 같은 회차 최장 응답 1,156ms / 곱도리 재시도 리허설 p6·p7은 50001 → 1초 뒤 다시 불러 정상). 곧바로 다시 부른 요청은 전부 정상이었고, 그 밖의 페이지에서는 0회 | 5xxxx는 같은 요청을 1초·3초 뒤 최대 2번 더 부른다(매장당 6번까지 — 설계 근거 참고). `정상 — 재시도 N회`면 그대로 저장 대상이다. 재시도 뒤에도 실패해 `ok:false`면 엑셀 행은 보존된다 — 재실행. 재시도가 매 실행 나오거나 매장당 6번을 다 쓰면 서버 쪽 장애이니 시간을 두고 재실행 |
+| `API 오류 50001: 외부 API 호출을 실패하였습니다.` — 상태 열 `정상 — 서버 일시 오류 재시도 N회`, 또는 사유 끝 `(재시도 N회 뒤)`·`페이지 실패 pN — API 오류 50001: …` | 서버 쪽 일시 오류. 2026-10-17 02:00~10:06 실측: 매장의 6개월 조회를 시작한 뒤 몇 초 안의 앞쪽 페이지(p1~p7)에서 다섯 번(김치찜 기간 변경 사전 실측 p1·실행 p1은 50001, 재수집 p3은 418바이트 봉투 — 같은 회차 최장 응답 1,156ms / 곱도리 재시도 리허설 p6·p7은 50001 → 1초 뒤 다시 불러 정상). 다시 부른 요청은 정상이었고(도입 뒤 한 번은 1초 뒤 재시도도 50001 이라 3초 뒤 두 번째에 받음 — 10-17 10:55 김치찜 p1), 그 밖의 페이지에서는 0회 | 5xxxx는 같은 요청을 1초·3초 뒤 최대 2번 더 부른다(매장당 6번까지 — 설계 근거 참고). `정상 — 재시도 N회`면 그대로 저장 대상이다. 재시도 뒤에도 실패해 `ok:false`면 엑셀 행은 보존된다 — 재실행. 재시도가 매 실행 나오거나 매장당 6번을 다 쓰면 서버 쪽 장애이니 시간을 두고 재실행 |
 | `응답 구조 불명: [...]` | (1) `code` 필드가 없는 응답으로 스키마가 바뀜 (2) `code` 검사를 지나쳤는데 `content` 계열 키가 없음 | 사유에 찍힌 키 목록을 본다. `data`·`error`·`code`가 보이면 API 오류 봉투가 그대로 온 것이니 위 행으로. 그 외에는 로그의 응답 키 목록으로 `pick()` 후보 추가 |
 | `apiTotal=0`인데 화면엔 리뷰가 보임 | 날짜 파라미터가 안 먹었거나 API 필터 기준이 바뀜 | 3개 매장 모두 0이면 특히 의심. `statusType` 파라미터가 빠진 경우는 0이 아니라 `API 오류 10007`(구버전이면 `응답 구조 불명: ["statusType"]`)로 나타난다(2026-09-09 실측) — 그 행을 볼 것 |
 | 특정 매장만 `ok:false` | 그 매장 API 실패 | 나머지 매장은 계속 진행. 그 매장 엑셀 행은 보존됨. 재실행으로 복구 |
