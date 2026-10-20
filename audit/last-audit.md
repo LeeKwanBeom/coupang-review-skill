@@ -648,6 +648,14 @@ Claude in Chrome(사용자 크롬, 로그인 상태) 새 탭 1개(끝나고 닫�
 - main 변경 · push · `.skill` 패키징 · 설치본 교체 · claude.ai 재업로드 · 운영 메모리(완료 기준 10) — 부모가 ④ 검증(Fable 5.1, `D:\review-verify`) 뒤에.
 - 리허설의 Step 0 백업 · Step 3 저장 — 쓰기 0.
 
+### 검증·병합 (2026-10-20)
+
+- ④ 검증(`D:\review-verify` 새 세션, **Fable 5.1** — 구현 Opus 5.5 와 다른 모델, 에이전트 2개 Sonnet · 약 30만 토큰): **막음 0 → 다음 단계로 가도 된다.** 완료 기준 1~6 참, 7 해당 없음(김치찜만), 8 참(기록·원자료 수준), 9 기록에 있음, 10 부모 몫. 구현 시험 재실행 277/277 · 실제 런타임 시험(실제 `fetch`·타이머·로컬 HTTP 서버) 1,744/1,744 · 문서 사실 대조 44건 불일치 0 · Step 2 블록 md5 `c7c9aedf…` 새·옛 같음. 전문 `D:\review-verify\쿠팡50001_검증_2026-10-20.md`.
+- 검증 새 이월(막음 아님 — 전문 "이월" 1~5): ① `~/.claude/commands/q-coupang-takedown.md:30` 이 "쿠팡 스킬 Step 1 과 같다" 며 옛 URL 을 씀(동작 그대로, 문구만 낡음) ② 621행 "그 밖의 페이지에서는 0회" 는 10-17 구간에 묶어 읽어야 맞음 ③ `warm` 은 content-type 을 안 봄(기록용, 영향 없음) ④ 200 본문이 늦으면 Step 1 이 그만큼(최대 15초) 느림 ⑤ 같은 탭 Step 1 재시작 때 최상위 `const` 재선언은 Node 로 재현 못 함(리허설 근거뿐).
+- ⑥ 병합(부모 운영 세션, 사용자 "③·④·병합은 묻지 말고 이어서" — 설계 문서 "② 고르기"): `impl-50001-warmup` → main fast-forward(`71fb240`) · 병합 뒤 전체 시험 1회(`git show main:SKILL.md` 로 꺼낸 판) 277/277 · `.skill` 재패키징(`D:\review-verify\coupang-review.skill`, 안의 SKILL.md md5 `218e2e29…`) · PC 설치본 교체 md5 `218e2e29c54dc844f68b4f913810ded4`(627행, 실제 파일은 `…\AppData\Local\Claude-Data\…\skills\coupang-review\SKILL.md` 하나 — `Packages\…\LocalCache\Roaming` 경로는 앱 가상 경로라 같은 파일) · 옛 설치본 사본 `D:\review\backup\coupang-review_SKILL_PC사본_재시도_워밍업전_20261020.md`(md5 `b394e41c…`) · 운영 메모리 `coupang-retry-50001` 에 `warm` 기록 규칙(완료 기준 10) · push.
+- 함정: 이 저장소는 `core.autocrlf=true` 라 체크아웃한 작업 트리 SKILL.md 가 CRLF(md5 `6b796b7a…`)다 — 설치본·패키지·시험은 `git show main:SKILL.md`(LF, `218e2e29…`)로 만든다. 작업 트리 파일을 그대로 복사하면 md5 가 어긋나고 시험 파서도 실패한다(2026-10-20 실측).
+- 남은 것: claude.ai 재업로드(사용자 손) · 실사용 3회 효과 판정(완료 기준 9 — 아래 대조 줄).
+
 ## 다음 점검에서 대조할 것
 
 - (50001 워밍업 회차 추가) 병합 뒤 실사용 3회: Step 1 `warm` 값과 `_log` 의 `다시 부름` 줄(김치찜은 매장 시작 0~4초 · p1~p7 것만 센다)로 완료 기준 9 판정 — 3회 중 2회 이상 김치찜 재시도면 효과 없음(먼저 본다) / `warm` 50001 인 날이 있고 그날 김치찜 재시도 0 이면 효과 있음 / 3회 모두 `warm` SUCCESS 면 보류. 효과 없음이어도 해가 없으면 다음 배포 회차에 걷어낸다.
